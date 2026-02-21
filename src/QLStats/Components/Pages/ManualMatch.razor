@@ -1,0 +1,181 @@
+@page "/match/manual"
+@rendermode InteractiveServer
+@using QLStats.Data
+@using QLStats.Data.Entities
+@inject AppDbContext Db
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Manual Match Entry — QL Stats</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Manual Match Entry</MudText>
+
+<MudCard Style="max-width:800px;">
+    <MudForm @ref="_form" @bind-IsValid="_isValid">
+        <MudCardContent>
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <MudTextField Label="Map" @bind-Value="_map" Required="true" RequiredError="Map is required" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField Label="Game Type" @bind-Value="_gameType" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker Label="Date" @bind-Date="_matchDate" Required="true" RequiredError="Date is required" />
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudNumericField Label="RED Score" @bind-Value="_redScore" Min="0" />
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudNumericField Label="BLUE Score" @bind-Value="_blueScore" Min="0" />
+                </MudItem>
+            </MudGrid>
+
+            <MudDivider Class="my-4" />
+            <MudText Typo="Typo.h6" Class="mb-2">Players</MudText>
+
+            @for (int i = 0; i < _playerRows.Count; i++)
+            {
+                var row = _playerRows[i];
+                var idx = i;
+                <MudGrid Class="mb-2" Style="align-items:center">
+                    <MudItem xs="12" sm="3">
+                        <MudSelect T="int?" @bind-Value="row.PlayerId" Label="Player" Dense="true">
+                            <MudSelectItem T="int?" Value="null">— Select —</MudSelectItem>
+                            @foreach (var p in _players)
+                            {
+                                <MudSelectItem T="int?" Value="p.Id">@p.DisplayName</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="6" sm="2">
+                        <MudSelect T="string" @bind-Value="row.Team" Label="Team" Dense="true">
+                            <MudSelectItem T="string" Value="@("RED")">RED</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("BLUE")">BLUE</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="3" sm="1">
+                        <MudNumericField Label="K" @bind-Value="row.Kills" Min="0" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="3" sm="1">
+                        <MudNumericField Label="D" @bind-Value="row.Deaths" Min="0" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="6" sm="2">
+                        <MudNumericField Label="Damage" @bind-Value="row.Damage" Min="0" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="1">
+                        <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" Color="Color.Error"
+                            OnClick="@(() => _playerRows.RemoveAt(idx))" />
+                    </MudItem>
+                </MudGrid>
+            }
+
+            <MudButton StartIcon="@Icons.Material.Filled.PersonAdd" Variant="Variant.Text"
+                OnClick="@(() => _playerRows.Add(new()))">Add Player</MudButton>
+        </MudCardContent>
+        <MudCardActions>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync"
+                Disabled="_saving">Save Match</MudButton>
+        </MudCardActions>
+    </MudForm>
+</MudCard>
+
+@code {
+    private string _map = "";
+    private string _gameType = "CA";
+    private DateTime? _matchDate = DateTime.Today;
+    private int _redScore;
+    private int _blueScore;
+    private List<Player> _players = [];
+    private List<PlayerRow> _playerRows = [new(), new(), new(), new()];
+    private bool _saving;
+    private MudForm? _form;
+    private bool _isValid;
+
+    private class PlayerRow
+    {
+        public int? PlayerId { get; set; }
+        public string Team { get; set; } = "RED";
+        public int Kills { get; set; }
+        public int Deaths { get; set; }
+        public int Damage { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _players = await Db.Players.OrderBy(p => p.DisplayName).ToListAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_form is not null)
+        {
+            await _form.Validate();
+            if (!_isValid) return;
+        }
+
+        _saving = true;
+        try
+        {
+            var date = DateOnly.FromDateTime(_matchDate!.Value);
+            var session = await Db.GameSessions.FirstOrDefaultAsync(s => s.SessionDate == date);
+            if (session is null)
+            {
+                session = new GameSession { SessionDate = date };
+                Db.GameSessions.Add(session);
+                await Db.SaveChangesAsync();
+            }
+
+            // Use or create a "Manual" server entry
+            var manualServer = await Db.QLServers.FirstOrDefaultAsync(s => s.Name == "Manual") ??
+                new QLServer { Name = "Manual", ZmqAddress = "manual://", IsActive = false };
+            if (manualServer.Id == 0) { Db.QLServers.Add(manualServer); await Db.SaveChangesAsync(); }
+
+            var match = new Match
+            {
+                GameSessionId = session.Id,
+                QLServerId = manualServer.Id,
+                MatchGuid = Guid.NewGuid().ToString(),
+                Map = _map,
+                GameType = _gameType,
+                ServerTitle = "Manual Entry",
+                StartedAt = _matchDate!.Value,
+                FinishedAt = _matchDate!.Value,
+                TeamRedRounds = _redScore,
+                TeamBlueRounds = _blueScore,
+                IsManualEntry = true
+            };
+            Db.Matches.Add(match);
+            await Db.SaveChangesAsync();
+
+            bool redWon = _redScore > _blueScore;
+            foreach (var row in _playerRows.Where(r => r.PlayerId.HasValue))
+            {
+                var teamRoundsWon = row.Team == "RED" ? _redScore : _blueScore;
+                var teamRoundsLost = row.Team == "RED" ? _blueScore : _redScore;
+                var won = row.Team == "RED" ? redWon : !redWon;
+                Db.MatchPlayers.Add(new MatchPlayer
+                {
+                    MatchId = match.Id,
+                    PlayerId = row.PlayerId!.Value,
+                    Team = row.Team,
+                    Won = won,
+                    Kills = row.Kills,
+                    Deaths = row.Deaths,
+                    DamageDealt = row.Damage,
+                    RoundsWon = teamRoundsWon,
+                    RoundsLost = teamRoundsLost
+                });
+            }
+            await Db.SaveChangesAsync();
+
+            Snackbar.Add("Match saved.", Severity.Success);
+            Nav.NavigateTo($"/matches/{match.Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally { _saving = false; }
+    }
+}

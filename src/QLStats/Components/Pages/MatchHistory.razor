@@ -1,0 +1,98 @@
+@page "/matches"
+@rendermode InteractiveServer
+@using QLStats.Data
+@using QLStats.Data.Entities
+@inject AppDbContext Db
+
+<PageTitle>Match History — QL Stats</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Match History</MudText>
+
+<MudGrid Class="mb-4">
+    <MudItem xs="12" sm="4">
+        <MudTextField @bind-Value="_mapFilter" Label="Filter by map" Immediate="true"
+            Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Search"
+            DebounceInterval="300" OnDebounceIntervalElapsed="LoadAsync" />
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudSelect T="int?" @bind-Value="_playerFilter" Label="Filter by player"
+            Clearable="true">
+            <MudSelectItem T="int?" Value="null">All players</MudSelectItem>
+            @foreach (var p in _players)
+            {
+                <MudSelectItem T="int?" Value="p.Id">@p.DisplayName</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" sm="4" Class="d-flex align-end">
+        <MudButton Variant="Variant.Outlined" OnClick="LoadAsync" StartIcon="@Icons.Material.Filled.FilterList">
+            Apply Filter
+        </MudButton>
+    </MudItem>
+</MudGrid>
+
+<MudTable Items="_matches" Dense="true" Hover="true" Loading="_loading">
+    <HeaderContent>
+        <MudTh>Date</MudTh>
+        <MudTh>Map</MudTh>
+        <MudTh>Server</MudTh>
+        <MudTh>Score</MudTh>
+        <MudTh>Players</MudTh>
+        <MudTh></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.StartedAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
+        <MudTd>@context.Map</MudTd>
+        <MudTd>@(context.QLServer?.Name ?? context.ServerTitle)</MudTd>
+        <MudTd>RED @context.TeamRedRounds – @context.TeamBlueRounds BLUE</MudTd>
+        <MudTd>
+            @foreach (var mp in context.MatchPlayers.OrderBy(p => p.Team))
+            {
+                <MudChip T="string" Color="@(mp.Team == "RED" ? Color.Error : Color.Info)" Size="Size.Small" Class="mr-1">
+                    @mp.Player.DisplayName
+                </MudChip>
+            }
+        </MudTd>
+        <MudTd>
+            <MudIconButton Href="@($"/matches/{context.Id}")" Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" />
+        </MudTd>
+    </RowTemplate>
+    <PagerContent>
+        <MudTablePager />
+    </PagerContent>
+</MudTable>
+
+@code {
+    private List<Match> _matches = [];
+    private List<Player> _players = [];
+    private bool _loading = true;
+    private string? _mapFilter;
+    private int? _playerFilter;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _players = await Db.Players.OrderBy(p => p.DisplayName).ToListAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        var query = Db.Matches
+            .Include(m => m.MatchPlayers).ThenInclude(mp => mp.Player)
+            .Include(m => m.QLServer)
+            .Where(m => m.FinishedAt != null)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(_mapFilter))
+            query = query.Where(m => m.Map.Contains(_mapFilter));
+
+        if (_playerFilter.HasValue)
+            query = query.Where(m => m.MatchPlayers.Any(mp => mp.PlayerId == _playerFilter));
+
+        _matches = await query
+            .OrderByDescending(m => m.StartedAt)
+            .ToListAsync();
+        _loading = false;
+    }
+}

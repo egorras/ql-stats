@@ -1,0 +1,84 @@
+@page "/players"
+@rendermode InteractiveServer
+@using QLStats.Data
+@using QLStats.Data.Entities
+@inject AppDbContext Db
+@inject ISnackbar Snackbar
+
+<PageTitle>Players — QL Stats</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Players</MudText>
+
+<MudTable Items="_players" Dense="true" Hover="true" Loading="_loading">
+    <HeaderContent>
+        <MudTh>Display Name</MudTh>
+        <MudTh>Steam ID</MudTh>
+        <MudTh>First Seen</MudTh>
+        <MudTh>Last Seen</MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>
+            @if (_editingId == context.Id)
+            {
+                <MudTextField @bind-Value="_editName" Immediate="true" Margin="Margin.Dense" />
+            }
+            else
+            {
+                @context.DisplayName
+            }
+        </MudTd>
+        <MudTd>@context.SteamId</MudTd>
+        <MudTd>@context.FirstSeenAt.ToString("yyyy-MM-dd")</MudTd>
+        <MudTd>@context.LastSeenAt.ToString("yyyy-MM-dd")</MudTd>
+        <MudTd>
+            @if (_editingId == context.Id)
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Save" Color="Color.Success" Size="Size.Small"
+                    OnClick="@(() => SaveAsync(context))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Cancel" Color="Color.Default" Size="Size.Small"
+                    OnClick="@CancelEdit" />
+            }
+            else
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                    OnClick="@(() => StartEdit(context))" />
+            }
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+@code {
+    private List<Player> _players = [];
+    private bool _loading = true;
+    private int _editingId;
+    private string _editName = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _players = await Db.Players.OrderBy(p => p.DisplayName).ToListAsync();
+        _loading = false;
+    }
+
+    private void StartEdit(Player p)
+    {
+        _editingId = p.Id;
+        _editName = p.DisplayName;
+    }
+
+    private void CancelEdit() => _editingId = 0;
+
+    private async Task SaveAsync(Player p)
+    {
+        if (string.IsNullOrWhiteSpace(_editName))
+        {
+            Snackbar.Add("Name cannot be empty", Severity.Warning);
+            return;
+        }
+
+        p.DisplayName = _editName.Trim();
+        await Db.SaveChangesAsync();
+        _editingId = 0;
+        Snackbar.Add("Player updated", Severity.Success);
+    }
+}

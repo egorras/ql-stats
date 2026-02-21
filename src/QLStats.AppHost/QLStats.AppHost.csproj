@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <Sdk Name="Aspire.AppHost.Sdk" Version="9.5.0" />
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>qlstats-apphost</UserSecretsId>
+    <!-- Suppress EF Core version conflict: Aspire.Hosting.PostgreSQL uses 10.0.0; QLStats uses 10.0.x -->
+    <NoWarn>$(NoWarn);MSB3277</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.AppHost" Version="13.1.1" />
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- IsAspireProjectResource=true enables source generation of Projects.QLStats metadata class -->
+    <ProjectReference Include="..\QLStats\QLStats.csproj">
+      <IsAspireProjectResource>true</IsAspireProjectResource>
+    </ProjectReference>
+  </ItemGroup>
+
+</Project>

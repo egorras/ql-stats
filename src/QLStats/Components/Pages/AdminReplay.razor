@@ -1,0 +1,110 @@
+@page "/admin/replay"
+@rendermode InteractiveServer
+@using QLStats.Services
+@inject EventReplayService ReplayService
+@inject ISnackbar Snackbar
+@inject LiveMatchState LiveMatch
+
+<PageTitle>Event Replay — QL Stats</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Event Replay</MudText>
+
+@if (LiveMatch.Current is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4">
+        A match is currently in progress. Replay is disabled to prevent data corruption.
+    </MudAlert>
+}
+else
+{
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudCard>
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Replay Unprocessed Events</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText>Re-run all ZmqEvent rows where <code>Processed = false</code> through the ingestion pipeline.
+                        Useful after a bug fix without a full rebuild.</MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="ReplayUnprocessedAsync"
+                        Disabled="_running">
+                        @if (_running) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                        Replay Unprocessed
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudCard>
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Full Replay (Rebuild)</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+                        This will <strong>delete all</strong> match/session/standings data and rebuild from the event log.
+                    </MudAlert>
+                    <MudDatePicker Label="Replay from date (optional)" @bind-Date="_replayFrom" />
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Error" OnClick="ReplayAllAsync"
+                        Disabled="_running">
+                        @if (_running) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                        Full Rebuild
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    @if (_lastResult is not null)
+    {
+        <MudAlert Severity="Severity.Success" Class="mt-4">@_lastResult</MudAlert>
+    }
+}
+
+@code {
+    private bool _running;
+    private string? _lastResult;
+    private DateTime? _replayFrom;
+
+    private async Task ReplayUnprocessedAsync()
+    {
+        _running = true;
+        _lastResult = null;
+        try
+        {
+            var count = await ReplayService.ReplayUnprocessedAsync();
+            _lastResult = $"Replayed {count} unprocessed events.";
+            Snackbar.Add(_lastResult, Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Replay failed: {ex.Message}", Severity.Error);
+        }
+        finally { _running = false; }
+    }
+
+    private async Task ReplayAllAsync()
+    {
+        _running = true;
+        _lastResult = null;
+        try
+        {
+            var count = await ReplayService.ReplayAllAsync(_replayFrom);
+            _lastResult = $"Full rebuild complete: {count} events processed.";
+            Snackbar.Add(_lastResult, Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Replay failed: {ex.Message}", Severity.Error);
+        }
+        finally { _running = false; }
+    }
+}

@@ -1,0 +1,171 @@
+@page "/seasons"
+@using QLStats.Data
+@using QLStats.Data.Entities
+@inject AppDbContext Db
+@inject ISnackbar Snackbar
+
+<PageTitle>Seasons — QL Stats</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Seasons</MudText>
+
+<MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+    OnClick="OpenAddDialog" Class="mb-4">New Season</MudButton>
+
+<MudTable Items="_seasons" Dense="true" Hover="true" Loading="_loading">
+    <HeaderContent>
+        <MudTh>Name</MudTh>
+        <MudTh>Start</MudTh>
+        <MudTh>End</MudTh>
+        <MudTh>Active</MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>
+            <MudLink Href="@($"/seasons/{context.Id}")">@context.Name</MudLink>
+        </MudTd>
+        <MudTd>@context.StartDate</MudTd>
+        <MudTd>@(context.EndDate?.ToString() ?? "—")</MudTd>
+        <MudTd>
+            @if (context.IsActive)
+            {
+                <MudChip T="string" Color="Color.Success" Size="Size.Small">Active</MudChip>
+            }
+        </MudTd>
+        <MudTd>
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                OnClick="@(() => OpenEditDialog(context))" />
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+<MudDialog @bind-Visible="_dialogOpen">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_editSeason.Id == 0 ? "New Season" : "Edit Season")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_isValid">
+            <MudTextField Label="Name" @bind-Value="_editSeason.Name" Required="true" RequiredError="Name is required" Class="mb-3" />
+            <MudDatePicker Label="Start Date" @bind-Date="_startDate" Required="true" RequiredError="Start date is required" Class="mb-3" />
+            <MudDatePicker Label="End Date (optional)" @bind-Date="_endDate" Class="mb-3" />
+            <MudSwitch T="bool" @bind-Value="_editSeason.IsActive" Label="Active" Color="Color.Success" Class="mb-3" />
+
+            <MudText Typo="Typo.subtitle2" Class="mt-2 mb-2">Scoring Formula</MudText>
+            <MudGrid>
+                <MudItem xs="6">
+                    <MudNumericField Label="Points per Kill" @bind-Value="_editSeason.PointsPerKill" Format="0.####" />
+                </MudItem>
+                <MudItem xs="6">
+                    <MudNumericField Label="Points per Death" @bind-Value="_editSeason.PointsPerDeath" Format="0.####" />
+                </MudItem>
+                <MudItem xs="6">
+                    <MudNumericField Label="Points per Win" @bind-Value="_editSeason.PointsPerWin" Format="0.####" />
+                </MudItem>
+                <MudItem xs="6">
+                    <MudNumericField Label="Points per Loss" @bind-Value="_editSeason.PointsPerLoss" Format="0.####" />
+                </MudItem>
+                <MudItem xs="6">
+                    <MudNumericField Label="Points per Round Won" @bind-Value="_editSeason.PointsPerRoundWon" Format="0.####" />
+                </MudItem>
+                <MudItem xs="6">
+                    <MudNumericField Label="Points per Round Lost" @bind-Value="_editSeason.PointsPerRoundLost" Format="0.####" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudNumericField Label="Points per Damage Dealt" @bind-Value="_editSeason.PointsPerDamageDealt" Format="0.######" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _dialogOpen = false)">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveSeasonAsync">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<Season> _seasons = [];
+    private bool _loading = true;
+    private bool _dialogOpen;
+    private Season _editSeason = new();
+    private DateTime? _startDate;
+    private DateTime? _endDate;
+    private MudForm? _form;
+    private bool _isValid;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _seasons = await Db.Seasons.OrderByDescending(s => s.IsActive).ThenByDescending(s => s.StartDate).ToListAsync();
+        _loading = false;
+    }
+
+    private void OpenAddDialog()
+    {
+        _editSeason = new Season
+        {
+            StartDate = DateOnly.FromDateTime(DateTime.Today),
+            PointsPerKill = 1, PointsPerDeath = -0.5m, PointsPerWin = 5,
+            PointsPerRoundWon = 0.5m, PointsPerDamageDealt = 0.01m
+        };
+        _startDate = _editSeason.StartDate.ToDateTime(TimeOnly.MinValue);
+        _endDate = null;
+        _dialogOpen = true;
+    }
+
+    private void OpenEditDialog(Season s)
+    {
+        _editSeason = new Season
+        {
+            Id = s.Id, Name = s.Name, StartDate = s.StartDate, EndDate = s.EndDate,
+            IsActive = s.IsActive, PointsPerKill = s.PointsPerKill, PointsPerDeath = s.PointsPerDeath,
+            PointsPerWin = s.PointsPerWin, PointsPerLoss = s.PointsPerLoss,
+            PointsPerRoundWon = s.PointsPerRoundWon, PointsPerRoundLost = s.PointsPerRoundLost,
+            PointsPerDamageDealt = s.PointsPerDamageDealt
+        };
+        _startDate = s.StartDate.ToDateTime(TimeOnly.MinValue);
+        _endDate = s.EndDate?.ToDateTime(TimeOnly.MinValue);
+        _dialogOpen = true;
+    }
+
+    private async Task SaveSeasonAsync()
+    {
+        if (_form is not null)
+        {
+            await _form.Validate();
+            if (!_isValid) return;
+        }
+
+        _editSeason.StartDate = _startDate.HasValue ? DateOnly.FromDateTime(_startDate.Value) : DateOnly.FromDateTime(DateTime.Today);
+        _editSeason.EndDate = _endDate.HasValue ? DateOnly.FromDateTime(_endDate.Value) : null;
+
+        if (_editSeason.Id == 0)
+        {
+            Db.Seasons.Add(_editSeason);
+        }
+        else
+        {
+            var existing = await Db.Seasons.FindAsync(_editSeason.Id);
+            if (existing is not null)
+            {
+                existing.Name = _editSeason.Name;
+                existing.StartDate = _editSeason.StartDate;
+                existing.EndDate = _editSeason.EndDate;
+                existing.IsActive = _editSeason.IsActive;
+                existing.PointsPerKill = _editSeason.PointsPerKill;
+                existing.PointsPerDeath = _editSeason.PointsPerDeath;
+                existing.PointsPerWin = _editSeason.PointsPerWin;
+                existing.PointsPerLoss = _editSeason.PointsPerLoss;
+                existing.PointsPerRoundWon = _editSeason.PointsPerRoundWon;
+                existing.PointsPerRoundLost = _editSeason.PointsPerRoundLost;
+                existing.PointsPerDamageDealt = _editSeason.PointsPerDamageDealt;
+            }
+        }
+        await Db.SaveChangesAsync();
+        await LoadAsync();
+        _dialogOpen = false;
+        Snackbar.Add("Season saved.", Severity.Success);
+    }
+}

@@ -1,0 +1,136 @@
+@page "/"
+@rendermode InteractiveServer
+@using QLStats.Data
+@using QLStats.Data.Entities
+@using QLStats.Services
+@inject AppDbContext Db
+@inject StandingsService StandingsService
+@inject LiveMatchState LiveMatch
+@implements IDisposable
+
+<PageTitle>Dashboard — QL Stats</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Dashboard</MudText>
+
+@if (_liveMatch is not null)
+{
+    <MudAlert Severity="Severity.Info" Class="mb-4" Icon="@Icons.Material.Filled.LiveTv">
+        <strong>Match in progress</strong> — @_liveMatch.Map on @_liveMatch.ServerName
+        &nbsp;RED @_liveMatch.RedScore – @_liveMatch.BlueScore BLUE
+        (Round @_liveMatch.RoundNumber)
+        <MudLink Href="/live" Class="ml-2">Watch live</MudLink>
+    </MudAlert>
+}
+
+<MudGrid>
+    <MudItem xs="12" md="8">
+        @if (_activeSeason is not null && _standings.Count > 0)
+        {
+            <MudCard Class="mb-4">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">@_activeSeason.Name — Standings</MudText>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <MudButton Href="@($"/seasons/{_activeSeason.Id}")" Variant="Variant.Text">Full standings</MudButton>
+                    </CardHeaderActions>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudTable Items="_standings" Dense="true" Hover="true" Elevation="0">
+                        <HeaderContent>
+                            <MudTh>#</MudTh>
+                            <MudTh>Player</MudTh>
+                            <MudTh>Pts</MudTh>
+                            <MudTh>W</MudTh>
+                            <MudTh>L</MudTh>
+                            <MudTh>K</MudTh>
+                            <MudTh>D</MudTh>
+                            <MudTh>K/D</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>@(_standings.IndexOf(context) + 1)</MudTd>
+                            <MudTd>@context.DisplayName</MudTd>
+                            <MudTd><strong>@context.TotalPoints.ToString("0.##")</strong></MudTd>
+                            <MudTd>@context.Wins</MudTd>
+                            <MudTd>@context.Losses</MudTd>
+                            <MudTd>@context.Kills</MudTd>
+                            <MudTd>@context.Deaths</MudTd>
+                            <MudTd>@(context.Deaths == 0 ? context.Kills.ToString() : ((double)context.Kills / context.Deaths).ToString("0.##"))</MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudCardContent>
+            </MudCard>
+        }
+        else if (_activeSeason is null)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mb-4">
+                No active season. <MudLink Href="/seasons">Create one</MudLink>
+            </MudAlert>
+        }
+    </MudItem>
+
+    <MudItem xs="12" md="4">
+        <MudCard>
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Recent Matches</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudButton Href="/matches" Variant="Variant.Text">All</MudButton>
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                @if (_recentMatches.Count == 0)
+                {
+                    <MudText Color="Color.Secondary">No matches yet.</MudText>
+                }
+                @foreach (var m in _recentMatches)
+                {
+                    <MudPaper Class="pa-2 mb-2" Elevation="0" Outlined="true">
+                        <MudText Typo="Typo.body2">
+                            <strong>@m.Map</strong> — @m.StartedAt.ToString("MMM d HH:mm")
+                        </MudText>
+                        <MudText Typo="Typo.caption">
+                            RED @m.TeamRedRounds – @m.TeamBlueRounds BLUE
+                        </MudText>
+                    </MudPaper>
+                }
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private Season? _activeSeason;
+    private List<PlayerStanding> _standings = [];
+    private List<Match> _recentMatches = [];
+    private LiveMatchDto? _liveMatch;
+
+    protected override async Task OnInitializedAsync()
+    {
+        LiveMatch.OnMatchStateChanged += HandleMatchStateChanged;
+        _liveMatch = LiveMatch.Current;
+
+        _activeSeason = await Db.Seasons.FirstOrDefaultAsync(s => s.IsActive);
+
+        if (_activeSeason is not null)
+        {
+            try { _standings = await StandingsService.GetSeasonStandingsAsync(_activeSeason.Id); }
+            catch { _standings = []; }
+        }
+
+        _recentMatches = await Db.Matches
+            .Where(m => m.FinishedAt != null)
+            .OrderByDescending(m => m.StartedAt)
+            .Take(5)
+            .ToListAsync();
+    }
+
+    private void HandleMatchStateChanged()
+    {
+        _liveMatch = LiveMatch.Current;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => LiveMatch.OnMatchStateChanged -= HandleMatchStateChanged;
+}

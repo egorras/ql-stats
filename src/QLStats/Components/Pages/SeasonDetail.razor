@@ -1,0 +1,97 @@
+@page "/seasons/{SeasonId:int}"
+@rendermode InteractiveServer
+@using QLStats.Data
+@using QLStats.Services
+@inject AppDbContext Db
+@inject StandingsService StandingsService
+
+<PageTitle>Season — QL Stats</PageTitle>
+
+@if (_season is null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudText Typo="Typo.h4" Class="mb-1">@_season.Name</MudText>
+    <MudText Color="Color.Secondary" Class="mb-4">
+        @_season.StartDate — @(_season.EndDate?.ToString() ?? "ongoing")
+    </MudText>
+
+    <MudText Typo="Typo.h6" Class="mb-2">Scoring Formula</MudText>
+    <MudPaper Class="pa-3 mb-4" Elevation="0" Outlined="true">
+        <MudGrid>
+            <MudItem xs="6" sm="3"><MudText>Kill: <strong>+@_season.PointsPerKill</strong></MudText></MudItem>
+            <MudItem xs="6" sm="3"><MudText>Death: <strong>@_season.PointsPerDeath</strong></MudText></MudItem>
+            <MudItem xs="6" sm="3"><MudText>Win: <strong>+@_season.PointsPerWin</strong></MudText></MudItem>
+            <MudItem xs="6" sm="3"><MudText>Loss: <strong>@_season.PointsPerLoss</strong></MudText></MudItem>
+            <MudItem xs="6" sm="3"><MudText>Round Won: <strong>+@_season.PointsPerRoundWon</strong></MudText></MudItem>
+            <MudItem xs="6" sm="3"><MudText>Round Lost: <strong>@_season.PointsPerRoundLost</strong></MudText></MudItem>
+            <MudItem xs="6" sm="3"><MudText>Damage: <strong>×@_season.PointsPerDamageDealt</strong></MudText></MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <MudText Typo="Typo.h6" Class="mb-2">Standings</MudText>
+    @if (_standings.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">No matches recorded for this season yet.</MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_standings" Dense="true" Hover="true">
+            <HeaderContent>
+                <MudTh>#</MudTh>
+                <MudTh>Player</MudTh>
+                <MudTh>Points</MudTh>
+                <MudTh>W</MudTh>
+                <MudTh>L</MudTh>
+                <MudTh>Matches</MudTh>
+                <MudTh>K</MudTh>
+                <MudTh>D</MudTh>
+                <MudTh>K/D</MudTh>
+                <MudTh>Dmg</MudTh>
+                <MudTh>Breakdown</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@(_standings.IndexOf(context) + 1)</MudTd>
+                <MudTd><strong>@context.DisplayName</strong></MudTd>
+                <MudTd><strong>@context.TotalPoints.ToString("0.##")</strong></MudTd>
+                <MudTd>@context.Wins</MudTd>
+                <MudTd>@context.Losses</MudTd>
+                <MudTd>@context.MatchesPlayed</MudTd>
+                <MudTd>@context.Kills</MudTd>
+                <MudTd>@context.Deaths</MudTd>
+                <MudTd>@(context.Deaths == 0 ? context.Kills.ToString() : ((double)context.Kills / context.Deaths).ToString("0.##"))</MudTd>
+                <MudTd>@context.DamageDealt.ToString("N0")</MudTd>
+                <MudTd>
+                    <MudTooltip Text="@GetBreakdownTooltip(context)">
+                        <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" />
+                    </MudTooltip>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+}
+
+@code {
+    [Parameter] public int SeasonId { get; set; }
+
+    private QLStats.Data.Entities.Season? _season;
+    private List<PlayerStanding> _standings = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _season = await Db.Seasons.FindAsync(SeasonId);
+        if (_season is not null)
+        {
+            try { _standings = await StandingsService.GetSeasonStandingsAsync(SeasonId); }
+            catch { _standings = []; }
+        }
+    }
+
+    private string GetBreakdownTooltip(PlayerStanding s) =>
+        $"Kills: {s.PointsFromKills:0.##} | Deaths: {s.PointsFromDeaths:0.##} | " +
+        $"Wins: {s.PointsFromWins:0.##} | Losses: {s.PointsFromLosses:0.##} | " +
+        $"Rounds W: {s.PointsFromRoundsWon:0.##} | Rounds L: {s.PointsFromRoundsLost:0.##} | " +
+        $"Damage: {s.PointsFromDamage:0.##}";
+}

@@ -1,0 +1,195 @@
+@page "/servers"
+@using QLStats.Data
+@using QLStats.Data.Entities
+@using QLStats.Services
+@inject AppDbContext Db
+@inject IZmqListenerControl ZmqControl
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Servers — QL Stats</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">QL Servers</MudText>
+
+<MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+    OnClick="OpenAddDialog" Class="mb-4">Add Server</MudButton>
+
+<MudTable Items="_servers" Dense="true" Hover="true" Loading="_loading">
+    <HeaderContent>
+        <MudTh>Status</MudTh>
+        <MudTh>Name</MudTh>
+        <MudTh>ZMQ Address</MudTh>
+        <MudTh>Active</MudTh>
+        <MudTh>Last Msg</MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>
+            @{
+                var status = _statuses.FirstOrDefault(s => s.ServerId == context.Id);
+                if (status is null || !context.IsActive)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Circle" Color="Color.Default" Size="Size.Small" title="Inactive" />
+                }
+                else if (!string.IsNullOrEmpty(status.LastError))
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error" Size="Size.Small" title="@status.LastError" />
+                }
+                else if (status.LastMessageAt > DateTime.UtcNow.AddMinutes(-1))
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Circle" Color="Color.Success" Size="Size.Small" Class="pulse-icon" title="Connected & Active" />
+                }
+                else
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Circle" Color="Color.Info" Size="Size.Small" title="Connected (Waiting for events)" />
+                }
+            }
+        </MudTd>
+        <MudTd>@context.Name</MudTd>
+        <MudTd><code>@context.ZmqAddress</code></MudTd>
+        <MudTd>
+            <MudSwitch T="bool" Value="context.IsActive" ValueChanged="@((v) => ToggleActiveAsync(context, v))"
+                Color="Color.Success" />
+        </MudTd>
+        <MudTd>
+            @{
+                var s = _statuses.FirstOrDefault(x => x.ServerId == context.Id);
+                @(s?.LastMessageAt?.ToLocalTime().ToString("HH:mm:ss") ?? "—")
+            }
+        </MudTd>
+        <MudTd>
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                OnClick="@(() => OpenEditDialog(context))" />
+            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                OnClick="@(() => DeleteAsync(context))" />
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+<style>
+    .pulse-icon {
+        animation: pulse-animation 2s infinite;
+    }
+    @@keyframes pulse-animation {
+        0% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.6; transform: scale(1.1); }
+        100% { opacity: 1; transform: scale(1); }
+    }
+</style>
+
+<MudDialog @bind-Visible="_dialogOpen">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_editServer.Id == 0 ? "Add Server" : "Edit Server")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_isValid">
+            <MudTextField Label="Name" @bind-Value="_editServer.Name" Required="true" RequiredError="Name is required" Class="mb-3" />
+            <MudTextField Label="ZMQ Address" @bind-Value="_editServer.ZmqAddress"
+                Placeholder="tcp://192.168.1.100:27960" Required="true" RequiredError="ZMQ address is required" Class="mb-3" />
+            <MudNumericField Label="Reconnect Interval (ms)" @bind-Value="_editServer.ReconnectIntervalMs" Class="mb-3" />
+            <MudSwitch T="bool" @bind-Value="_editServer.IsActive" Label="Active" Color="Color.Success" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _dialogOpen = false)">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveServerAsync">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@implements IDisposable
+@code {
+    private List<QLServer> _servers = [];
+    private List<ZmqServerStatus> _statuses = [];
+    private bool _loading = true;
+    private bool _dialogOpen;
+    private QLServer _editServer = new();
+    private System.Timers.Timer? _timer;
+    private MudForm? _form;
+    private bool _isValid;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _servers = await Db.QLServers.OrderBy(s => s.Name).ToListAsync();
+        UpdateStatuses();
+        _loading = false;
+
+        _timer = new System.Timers.Timer(3000);
+        _timer.Elapsed += (s, e) => UpdateStatuses();
+        _timer.AutoReset = true;
+        _timer.Enabled = true;
+    }
+
+    private void UpdateStatuses()
+    {
+        _statuses = ZmqControl.GetStatuses().ToList();
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+
+    private void OpenAddDialog()
+    {
+        _editServer = new QLServer { ReconnectIntervalMs = 5000, IsActive = true };
+        _dialogOpen = true;
+    }
+
+    private void OpenEditDialog(QLServer s)
+    {
+        _editServer = new QLServer
+        {
+            Id = s.Id, Name = s.Name, ZmqAddress = s.ZmqAddress,
+            IsActive = s.IsActive, ReconnectIntervalMs = s.ReconnectIntervalMs
+        };
+        _dialogOpen = true;
+    }
+
+    private async Task SaveServerAsync()
+    {
+        if (_form is not null)
+        {
+            await _form.Validate();
+            if (!_isValid) return;
+        }
+
+        if (_editServer.Id == 0)
+        {
+            Db.QLServers.Add(_editServer);
+        }
+        else
+        {
+            var existing = await Db.QLServers.FindAsync(_editServer.Id);
+            if (existing is not null)
+            {
+                existing.Name = _editServer.Name;
+                existing.ZmqAddress = _editServer.ZmqAddress;
+                existing.IsActive = _editServer.IsActive;
+                existing.ReconnectIntervalMs = _editServer.ReconnectIntervalMs;
+            }
+        }
+        await Db.SaveChangesAsync();
+        await ZmqControl.ReloadAsync();
+        _servers = await Db.QLServers.OrderBy(s => s.Name).ToListAsync();
+        _dialogOpen = false;
+        Snackbar.Add("Server saved. ZMQ listener reloaded.", Severity.Success);
+    }
+
+    private async Task ToggleActiveAsync(QLServer s, bool value)
+    {
+        s.IsActive = value;
+        await Db.SaveChangesAsync();
+        await ZmqControl.ReloadAsync();
+        Snackbar.Add($"Server {(value ? "enabled" : "disabled")}.", Severity.Info);
+    }
+
+    private async Task DeleteAsync(QLServer s)
+    {
+        Db.QLServers.Remove(s);
+        await Db.SaveChangesAsync();
+        await ZmqControl.ReloadAsync();
+        _servers.Remove(s);
+        Snackbar.Add("Server deleted.", Severity.Success);
+    }
+}

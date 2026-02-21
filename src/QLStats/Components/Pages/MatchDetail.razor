@@ -1,0 +1,124 @@
+@page "/matches/{MatchId:int}"
+@rendermode InteractiveServer
+@using QLStats.Data
+@using QLStats.Data.Entities
+@inject AppDbContext Db
+
+<PageTitle>Match Detail — QL Stats</PageTitle>
+
+@if (_match is null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudText Typo="Typo.h4" Class="mb-1">@_match.Map</MudText>
+    <MudText Color="Color.Secondary" Class="mb-4">
+        @_match.StartedAt.ToString("yyyy-MM-dd HH:mm") · @_match.ServerTitle
+        @if (_match.IsManualEntry) { <MudChip T="string" Size="Size.Small" Color="Color.Warning">Manual</MudChip> }
+    </MudText>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudGrid Justify="Justify.Center">
+            <MudItem>
+                <MudText Typo="Typo.h3" Align="Align.Center">
+                    <MudChip T="string" Color="Color.Error" Size="Size.Large">RED @_match.TeamRedRounds</MudChip>
+                    <span Class="mx-3">–</span>
+                    <MudChip T="string" Color="Color.Info" Size="Size.Large">BLUE @_match.TeamBlueRounds</MudChip>
+                </MudText>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudText Typo="Typo.h6" Class="mb-2" Color="Color.Error">RED Team</MudText>
+            <MudTable Items="_redPlayers" Dense="true" Hover="true" Elevation="0">
+                <HeaderContent>
+                    <MudTh>Player</MudTh>
+                    <MudTh>W/L</MudTh>
+                    <MudTh>K</MudTh>
+                    <MudTh>D</MudTh>
+                    <MudTh>K/D</MudTh>
+                    <MudTh>Dmg</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Player.DisplayName</MudTd>
+                    <MudTd>
+                        <MudChip T="string" Color="@(context.Won ? Color.Success : Color.Error)" Size="Size.Small">
+                            @(context.Won ? "W" : "L")
+                        </MudChip>
+                    </MudTd>
+                    <MudTd>@context.Kills</MudTd>
+                    <MudTd>@context.Deaths</MudTd>
+                    <MudTd>@(context.Deaths == 0 ? context.Kills.ToString() : ((double)context.Kills / context.Deaths).ToString("0.##"))</MudTd>
+                    <MudTd>@context.DamageDealt.ToString("N0")</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudText Typo="Typo.h6" Class="mb-2" Color="Color.Info">BLUE Team</MudText>
+            <MudTable Items="_bluePlayers" Dense="true" Hover="true" Elevation="0">
+                <HeaderContent>
+                    <MudTh>Player</MudTh>
+                    <MudTh>W/L</MudTh>
+                    <MudTh>K</MudTh>
+                    <MudTh>D</MudTh>
+                    <MudTh>K/D</MudTh>
+                    <MudTh>Dmg</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Player.DisplayName</MudTd>
+                    <MudTd>
+                        <MudChip T="string" Color="@(context.Won ? Color.Success : Color.Error)" Size="Size.Small">
+                            @(context.Won ? "W" : "L")
+                        </MudChip>
+                    </MudTd>
+                    <MudTd>@context.Kills</MudTd>
+                    <MudTd>@context.Deaths</MudTd>
+                    <MudTd>@(context.Deaths == 0 ? context.Kills.ToString() : ((double)context.Kills / context.Deaths).ToString("0.##"))</MudTd>
+                    <MudTd>@context.DamageDealt.ToString("N0")</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudItem>
+
+        @if (_match.RoundResults.Count > 0)
+        {
+            <MudItem xs="12">
+                <MudText Typo="Typo.h6" Class="mt-4 mb-2">Round Results</MudText>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                    @foreach (var r in _match.RoundResults.OrderBy(r => r.RoundNumber))
+                    {
+                        <MudChip T="string" Color="@(r.TeamWon == "RED" ? Color.Error : Color.Info)" Size="Size.Small">
+                            R@(r.RoundNumber): @r.TeamWon
+                        </MudChip>
+                    }
+                </div>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public int MatchId { get; set; }
+
+    private Match? _match;
+    private List<MatchPlayer> _redPlayers = [];
+    private List<MatchPlayer> _bluePlayers = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _match = await Db.Matches
+            .Include(m => m.MatchPlayers).ThenInclude(mp => mp.Player)
+            .Include(m => m.RoundResults)
+            .Include(m => m.QLServer)
+            .FirstOrDefaultAsync(m => m.Id == MatchId);
+
+        if (_match is not null)
+        {
+            _redPlayers = _match.MatchPlayers.Where(mp => mp.Team == "RED").ToList();
+            _bluePlayers = _match.MatchPlayers.Where(mp => mp.Team == "BLUE").ToList();
+        }
+    }
+}

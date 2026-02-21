@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/QLStats.AppHost/QLStats.AppHost.csproj" />
+    <Project Path="src/QLStats.ServiceDefaults/QLStats.ServiceDefaults.csproj" />
+    <Project Path="src/QLStats/QLStats.csproj" />
+  </Folder>
+</Solution>
