@@ -43,7 +43,7 @@
     <RowTemplate>
         <MudTd>@context.StartedAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
         <MudTd>@context.Map</MudTd>
-        <MudTd>@(context.QLServer?.Name ?? context.ServerTitle)</MudTd>
+        <MudTd>@context.ServerTitle</MudTd>
         <MudTd>RED @context.TeamRedRounds – @context.TeamBlueRounds BLUE</MudTd>
         <MudTd>
             @foreach (var mp in context.MatchPlayers.OrderBy(p => p.Team))

@@ -17,7 +17,6 @@
 <MudTable Items="_servers" Dense="true" Hover="true" Loading="_loading">
     <HeaderContent>
         <MudTh>Status</MudTh>
-        <MudTh>Name</MudTh>
         <MudTh>ZMQ Address</MudTh>
         <MudTh>Active</MudTh>
         <MudTh>Last Msg</MudTh>
@@ -45,7 +44,6 @@
                 }
             }
         </MudTd>
-        <MudTd>@context.Name</MudTd>
         <MudTd><code>@context.ZmqAddress</code></MudTd>
         <MudTd>
             <MudSwitch T="bool" Value="context.IsActive" ValueChanged="@((v) => ToggleActiveAsync(context, v))"
@@ -85,7 +83,6 @@
     </TitleContent>
     <DialogContent>
         <MudForm @ref="_form" @bind-IsValid="_isValid">
-            <MudTextField Label="Name" @bind-Value="_editServer.Name" Required="true" RequiredError="Name is required" Class="mb-3" />
             <MudTextField Label="ZMQ Address" @bind-Value="_editServer.ZmqAddress"
                 Placeholder="tcp://192.168.1.100:27960" Required="true" RequiredError="ZMQ address is required" Class="mb-3" />
             <MudNumericField Label="Reconnect Interval (ms)" @bind-Value="_editServer.ReconnectIntervalMs" Class="mb-3" />
@@ -111,7 +108,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _servers = await Db.QLServers.OrderBy(s => s.Name).ToListAsync();
+        _servers = await Db.QLServers.OrderBy(s => s.ZmqAddress).ToListAsync();
         UpdateStatuses();
         _loading = false;
 
@@ -142,7 +139,7 @@
     {
         _editServer = new QLServer
         {
-            Id = s.Id, Name = s.Name, ZmqAddress = s.ZmqAddress,
+            Id = s.Id, ZmqAddress = s.ZmqAddress,
             IsActive = s.IsActive, ReconnectIntervalMs = s.ReconnectIntervalMs
         };
         _dialogOpen = true;
@@ -165,7 +162,6 @@
             var existing = await Db.QLServers.FindAsync(_editServer.Id);
             if (existing is not null)
             {
-                existing.Name = _editServer.Name;
                 existing.ZmqAddress = _editServer.ZmqAddress;
                 existing.IsActive = _editServer.IsActive;
                 existing.ReconnectIntervalMs = _editServer.ReconnectIntervalMs;
@@ -173,7 +169,7 @@
         }
         await Db.SaveChangesAsync();
         await ZmqControl.ReloadAsync();
-        _servers = await Db.QLServers.OrderBy(s => s.Name).ToListAsync();
+        _servers = await Db.QLServers.OrderBy(s => s.ZmqAddress).ToListAsync();
         _dialogOpen = false;
         Snackbar.Add("Server saved. ZMQ listener reloaded.", Severity.Success);
     }

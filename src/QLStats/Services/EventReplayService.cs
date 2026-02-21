@@ -15,14 +15,13 @@ public class EventReplayService(
 
         var events = await db.ZmqEvents
             .Where(e => !e.Processed)
-            .Include(e => e.QLServer)
             .OrderBy(e => e.ReceivedAt)
             .ToListAsync();
 
         int count = 0;
         foreach (var ev in events)
         {
-            await ProcessEventAsync(ev.Id, ev.QLServerId, ev.QLServer?.Name ?? "", ev.EventType, ev.RawJson, db);
+            await ProcessEventAsync(ev.Id, ev.QLServerId, ev.RawJson, db);
             count++;
         }
 
@@ -43,7 +42,6 @@ public class EventReplayService(
         await db.GameSessions.ExecuteDeleteAsync();
 
         var query = db.ZmqEvents
-            .Include(e => e.QLServer)
             .OrderBy(e => e.ReceivedAt)
             .AsQueryable();
 
@@ -55,7 +53,7 @@ public class EventReplayService(
         int count = 0;
         foreach (var ev in events)
         {
-            await ProcessEventAsync(ev.Id, ev.QLServerId, ev.QLServer?.Name ?? "", ev.EventType, ev.RawJson, db);
+            await ProcessEventAsync(ev.Id, ev.QLServerId, ev.RawJson, db);
             count++;
         }
 
@@ -63,52 +61,14 @@ public class EventReplayService(
         return count;
     }
 
-    private async Task ProcessEventAsync(long eventId, int serverId, string serverName,
-        string eventType, string rawJson, AppDbContext db)
+    private async Task ProcessEventAsync(long eventId, int serverId,
+        string rawJson, AppDbContext db)
     {
         try
         {
-            var (_, data) = QLEventParser.ParseEnvelope(rawJson);
-
-            switch (eventType.ToUpperInvariant())
-            {
-                case "MATCH_STARTED":
-                {
-                    var ev = QLEventParser.ParseMatchStarted(data);
-                    if (ev is not null) await ingestion.HandleMatchStartedAsync(ev, serverId, serverName);
-                    break;
-                }
-                case "MATCH_REPORT":
-                {
-                    var ev = QLEventParser.ParseMatchReport(data);
-                    if (ev is not null) await ingestion.HandleMatchReportAsync(ev, serverId);
-                    break;
-                }
-                case "PLAYER_KILL":
-                {
-                    var ev = QLEventParser.ParsePlayerKill(data);
-                    if (ev is not null) await ingestion.HandlePlayerKillAsync(ev);
-                    break;
-                }
-                case "ROUND_OVER":
-                {
-                    var ev = QLEventParser.ParseRoundOver(data);
-                    if (ev is not null) await ingestion.HandleRoundOverAsync(ev);
-                    break;
-                }
-                case "PLAYER_STATS":
-                {
-                    var ev = QLEventParser.ParsePlayerStats(data);
-                    if (ev is not null) await ingestion.HandlePlayerStatsAsync(ev);
-                    break;
-                }
-                case "PLAYER_CONNECT":
-                {
-                    var ev = QLEventParser.ParsePlayerConnect(data);
-                    if (ev is not null) await ingestion.HandlePlayerConnectAsync(ev);
-                    break;
-                }
-            }
+            var @event = QLEventParser.Parse(rawJson)?.GetEvent();
+            if (@event is { Warmup: false })
+                await ingestion.HandleAsync(@event, serverId);
 
             await db.ZmqEvents
                 .Where(e => e.Id == eventId)

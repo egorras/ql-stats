@@ -28,7 +28,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         modelBuilder.Entity<QLServer>(e =>
         {
-            e.Property(s => s.Name).HasMaxLength(128);
             e.Property(s => s.ZmqAddress).HasMaxLength(256);
         });
 

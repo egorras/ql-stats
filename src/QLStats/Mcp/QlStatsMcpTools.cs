@@ -133,7 +133,7 @@ public class QlStatsMcpTools(AppDbContext db, StandingsService standings)
             match.Map,
             match.GameType,
             match.ServerTitle,
-            Server = match.QLServer?.Name,
+            Server = match.QLServer?.ZmqAddress,
             StartedAt = match.StartedAt.ToString("yyyy-MM-dd HH:mm"),
             FinishedAt = match.FinishedAt?.ToString("yyyy-MM-dd HH:mm"),
             match.TeamRedRounds,

@@ -8,7 +8,7 @@
 <PageTitle>ZMQ Events — QL Stats</PageTitle>
 
 <MudText Typo="Typo.h4" Class="mb-4">
-    @(ServerId.HasValue ? $"Server Events: {_server?.Name ?? ServerId.Value.ToString()}" : "All ZMQ Events")
+    @(ServerId.HasValue ? $"Server Events: {_server?.ZmqAddress ?? ServerId.Value.ToString()}" : "All ZMQ Events")
 </MudText>
 
 <MudTable T="ZmqEvent" ServerData="@(new Func<TableState, CancellationToken, Task<TableData<ZmqEvent>>>(ReloadData))"
@@ -27,7 +27,7 @@
         <MudTd>@context.ReceivedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
         @if (!ServerId.HasValue)
         {
-            <MudTd>@context.QLServer.Name</MudTd>
+            <MudTd>@context.QLServer.ZmqAddress</MudTd>
         }
         <MudTd><code>@context.EventType</code></MudTd>
         <MudTd>

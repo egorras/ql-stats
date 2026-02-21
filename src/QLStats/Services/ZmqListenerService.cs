@@ -59,13 +59,13 @@ public class ZmqListenerService(
             {
                 var cts = new CancellationTokenSource();
                 _serverTasks[server.Id] = cts;
-                _statuses[server.Id] = new ZmqServerStatus(server.Id, server.Name, true, null, null);
+                _statuses[server.Id] = new ZmqServerStatus(server.Id, server.ZmqAddress, true, null, null);
 
                 var capturedServer = server;
-                _ = Task.Run(() => RunServerLoopAsync(capturedServer.Id, capturedServer.Name,
+                _ = Task.Run(() => RunServerLoopAsync(capturedServer.Id,
                     capturedServer.ZmqAddress, capturedServer.ReconnectIntervalMs, cts.Token));
-                logger.LogInformation("Started ZMQ listener for server {ServerId} ({Name}) at {Address}",
-                    server.Id, server.Name, server.ZmqAddress);
+                logger.LogInformation("Started ZMQ listener for server {ServerId} at {Address}",
+                    server.Id, server.ZmqAddress);
             }
         }
         finally
@@ -74,7 +74,7 @@ public class ZmqListenerService(
         }
     }
 
-    private async Task RunServerLoopAsync(int serverId, string serverName, string address,
+    private async Task RunServerLoopAsync(int serverId, string address,
         int reconnectMs, CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
@@ -95,7 +95,7 @@ public class ZmqListenerService(
                         socket.TryReceiveFrameString(TimeSpan.FromMilliseconds(500), out var payload))
                     {
                         UpdateStatus(serverId, lastMessageAt: DateTime.UtcNow);
-                        _ = ProcessMessageAsync(serverId, serverName, topic!, payload!);
+                        _ = ProcessMessageAsync(serverId, topic!, payload!);
                     }
                 }
             }
@@ -120,59 +120,18 @@ public class ZmqListenerService(
         }
     }
 
-    private async Task ProcessMessageAsync(int serverId, string serverName, string topic, string payload)
+    private async Task ProcessMessageAsync(int serverId, string topic, string payload)
     {
         try
         {
-            var (eventType, data) = QLEventParser.ParseEnvelope(payload);
-            var eventId = await eventStore.StoreAsync(serverId, eventType, payload);
+            var @event = QLEventParser.Parse(payload)?.GetEvent();
 
-            switch (eventType.ToUpperInvariant())
-            {
-                case "MATCH_STARTED":
-                {
-                    var ev = QLEventParser.ParseMatchStarted(data);
-                    if (ev is not null)
-                        await ingestion.HandleMatchStartedAsync(ev, serverId, serverName);
-                    break;
-                }
-                case "MATCH_REPORT":
-                {
-                    var ev = QLEventParser.ParseMatchReport(data);
-                    if (ev is not null)
-                        await ingestion.HandleMatchReportAsync(ev, serverId);
-                    break;
-                }
-                case "PLAYER_KILL":
-                {
-                    var ev = QLEventParser.ParsePlayerKill(data);
-                    if (ev is not null)
-                        await ingestion.HandlePlayerKillAsync(ev);
-                    break;
-                }
-                case "ROUND_OVER":
-                {
-                    var ev = QLEventParser.ParseRoundOver(data);
-                    if (ev is not null)
-                        await ingestion.HandleRoundOverAsync(ev);
-                    break;
-                }
-                case "PLAYER_STATS":
-                {
-                    var ev = QLEventParser.ParsePlayerStats(data);
-                    if (ev is not null)
-                        await ingestion.HandlePlayerStatsAsync(ev);
-                    break;
-                }
-                case "PLAYER_CONNECT":
-                {
-                    var ev = QLEventParser.ParsePlayerConnect(data);
-                    if (ev is not null)
-                        await ingestion.HandlePlayerConnectAsync(ev);
-                    break;
-                }
-            }
+            // Warmup events update server last-seen (tracked before this call) but are not stored
+            if (@event?.Warmup == true) return;
 
+            var eventId = await eventStore.StoreAsync(serverId, payload);
+            if (@event is not null)
+                await ingestion.HandleAsync(@event, serverId);
             await eventStore.MarkProcessedAsync(eventId);
         }
         catch (Exception ex)

@@ -9,7 +9,18 @@ public class MatchIngestionService(
     LiveMatchState liveMatch,
     ILogger<MatchIngestionService> logger)
 {
-    public async Task HandleMatchStartedAsync(MatchStartedData data, int serverId, string serverName)
+    public Task HandleAsync(QlEvent @event, int serverId) => @event switch
+    {
+        MatchStartedData e  => HandleMatchStartedAsync(e, serverId),
+        MatchReportData e   => HandleMatchReportAsync(e, serverId),
+        PlayerKillData e    => HandlePlayerKillAsync(e),
+        RoundOverData e     => HandleRoundOverAsync(e),
+        PlayerStatsData e   => HandlePlayerStatsAsync(e),
+        PlayerConnectData e => HandlePlayerConnectAsync(e),
+        _                   => Task.CompletedTask
+    };
+
+    private async Task HandleMatchStartedAsync(MatchStartedData data, int serverId)
     {
         logger.LogInformation("Match started: {MatchGuid} on {Map}", data.MatchGuid, data.Map);
 
@@ -28,10 +39,10 @@ public class MatchIngestionService(
 
         var livePlayers = data.Players?.Select(p =>
             (p.SteamId, p.Name, p.Team == 1 ? "RED" : p.Team == 2 ? "BLUE" : ""));
-        liveMatch.StartMatch(matchGuid, data.Map, data.GameType, serverName, livePlayers);
+        liveMatch.StartMatch(matchGuid, data.Map, data.GameType, data.ServerTitle, livePlayers);
     }
 
-    public async Task HandleMatchReportAsync(MatchReportData data, int serverId)
+    private async Task HandleMatchReportAsync(MatchReportData data, int serverId)
     {
         logger.LogInformation("Match report: {MatchGuid}, RED={Red} BLUE={Blue}, Aborted={Aborted}",
             data.MatchGuid, data.Tscore0, data.Tscore1, data.Aborted);
@@ -66,10 +77,8 @@ public class MatchIngestionService(
         liveMatch.EndMatch();
     }
 
-    public async Task HandlePlayerStatsAsync(PlayerStatsData data)
+    private async Task HandlePlayerStatsAsync(PlayerStatsData data)
     {
-        if (data.Warmup) return;
-
         await using var db = await dbFactory.CreateDbContextAsync();
 
         var matchGuid = data.MatchGuid.ToString();
@@ -103,10 +112,8 @@ public class MatchIngestionService(
         await db.SaveChangesAsync();
     }
 
-    public async Task HandlePlayerKillAsync(PlayerKillData data)
+    private async Task HandlePlayerKillAsync(PlayerKillData data)
     {
-        if (data.Warmup) return;
-
         if (liveMatch.Current is null && data.MatchGuid != Guid.Empty)
             liveMatch.StartMatch(data.MatchGuid.ToString(), "", "", "");
 
@@ -118,7 +125,7 @@ public class MatchIngestionService(
         await Task.CompletedTask;
     }
 
-    public async Task HandleRoundOverAsync(RoundOverData data)
+    private async Task HandleRoundOverAsync(RoundOverData data)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var matchGuid = data.MatchGuid.ToString();
@@ -141,7 +148,7 @@ public class MatchIngestionService(
         liveMatch.RecordRoundOver(data.TeamWon == "RED" ? 1 : 2, data.Round);
     }
 
-    public async Task HandlePlayerConnectAsync(PlayerConnectData data)
+    private async Task HandlePlayerConnectAsync(PlayerConnectData data)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         await EnsurePlayerAsync(db, data.SteamId, data.Name);

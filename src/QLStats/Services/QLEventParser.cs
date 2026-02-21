@@ -99,6 +99,27 @@ public record PlayerMedalData : QlEvent
     public int Total { get; init; }
 }
 
+// Envelope — STJ uses TYPE as the discriminator to pick the derived type,
+// then deserializes DATA into TData automatically.
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "TYPE")]
+[JsonDerivedType(typeof(QlEnvelope<MatchStartedData>),  "MATCH_STARTED")]
+[JsonDerivedType(typeof(QlEnvelope<MatchReportData>),   "MATCH_REPORT")]
+[JsonDerivedType(typeof(QlEnvelope<PlayerKillData>),    "PLAYER_KILL")]
+[JsonDerivedType(typeof(QlEnvelope<RoundOverData>),     "ROUND_OVER")]
+[JsonDerivedType(typeof(QlEnvelope<PlayerStatsData>),   "PLAYER_STATS")]
+[JsonDerivedType(typeof(QlEnvelope<PlayerConnectData>), "PLAYER_CONNECT")]
+[JsonDerivedType(typeof(QlEnvelope<PlayerMedalData>),   "PLAYER_MEDAL")]
+public abstract record QlEnvelope
+{
+    public abstract QlEvent? GetEvent();
+}
+
+public record QlEnvelope<TData> : QlEnvelope where TData : QlEvent
+{
+    public TData? Data { get; init; }
+    public override QlEvent? GetEvent() => Data;
+}
+
 public static class QLEventParser
 {
     private static readonly JsonSerializerOptions JsonSerializerOptions = new()
@@ -107,26 +128,6 @@ public static class QLEventParser
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseUpper
     };
 
-    public static (string EventType, JsonElement Data) ParseEnvelope(string rawJson)
-    {
-        var doc = JsonDocument.Parse(rawJson);
-        var root = doc.RootElement;
-        var type = root.GetProperty("TYPE").GetString() ?? "";
-        var data = root.GetProperty("DATA");
-        return (type, data);
-    }
-
-    public static MatchStartedData?  ParseMatchStarted(JsonElement data)  => Deserialize<MatchStartedData>(data);
-    public static MatchReportData?   ParseMatchReport(JsonElement data)    => Deserialize<MatchReportData>(data);
-    public static PlayerKillData?    ParsePlayerKill(JsonElement data)     => Deserialize<PlayerKillData>(data);
-    public static RoundOverData?     ParseRoundOver(JsonElement data)      => Deserialize<RoundOverData>(data);
-    public static PlayerStatsData?   ParsePlayerStats(JsonElement data)    => Deserialize<PlayerStatsData>(data);
-    public static PlayerConnectData? ParsePlayerConnect(JsonElement data)  => Deserialize<PlayerConnectData>(data);
-    public static PlayerMedalData?   ParsePlayerMedal(JsonElement data)    => Deserialize<PlayerMedalData>(data);
-
-    private static T? Deserialize<T>(JsonElement data) where T : class
-    {
-        try { return JsonSerializer.Deserialize<T>(data, JsonSerializerOptions); }
-        catch { return null; }
-    }
+    public static QlEnvelope? Parse(string rawJson) =>
+        JsonSerializer.Deserialize<QlEnvelope>(rawJson, JsonSerializerOptions);
 }
