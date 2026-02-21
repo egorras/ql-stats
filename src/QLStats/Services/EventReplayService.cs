@@ -96,6 +96,18 @@ public class EventReplayService(
                     if (ev is not null) await ingestion.HandleRoundOverAsync(ev);
                     break;
                 }
+                case "PLAYER_STATS":
+                {
+                    var ev = QLEventParser.ParsePlayerStats(data);
+                    if (ev is not null) await ingestion.HandlePlayerStatsAsync(ev);
+                    break;
+                }
+                case "PLAYER_CONNECT":
+                {
+                    var ev = QLEventParser.ParsePlayerConnect(data);
+                    if (ev is not null) await ingestion.HandlePlayerConnectAsync(ev);
+                    break;
+                }
             }
 
             await db.ZmqEvents

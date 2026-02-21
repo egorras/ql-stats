@@ -37,7 +37,8 @@ public class LiveMatchState
         get { lock (_lock) { return _current; } }
     }
 
-    public void StartMatch(string matchGuid, string map, string gameType, string serverName)
+    public void StartMatch(string matchGuid, string map, string gameType, string serverName,
+        IEnumerable<(string SteamId, string Name, string Team)>? players = null)
     {
         lock (_lock)
         {
@@ -49,6 +50,12 @@ public class LiveMatchState
                 ServerName = serverName,
                 StartedAt = DateTime.UtcNow
             };
+
+            if (players is not null)
+            {
+                foreach (var (steamId, name, team) in players)
+                    _current.Players.Add(new LivePlayerState { SteamId = steamId, Name = name, Team = team });
+            }
         }
         OnMatchStateChanged?.Invoke();
     }
@@ -79,6 +86,18 @@ public class LiveMatchState
             _current.RoundNumber = roundNumber;
             if (winningTeam == 1) _current.RedScore++;
             else if (winningTeam == 2) _current.BlueScore++;
+        }
+        OnMatchStateChanged?.Invoke();
+    }
+
+    public void UpdateMatchInfo(string map, string gameType, string serverName)
+    {
+        lock (_lock)
+        {
+            if (_current is null) return;
+            if (!string.IsNullOrEmpty(map)) _current.Map = map;
+            if (!string.IsNullOrEmpty(gameType)) _current.GameType = gameType;
+            if (!string.IsNullOrEmpty(serverName)) _current.ServerName = serverName;
         }
         OnMatchStateChanged?.Invoke();
     }

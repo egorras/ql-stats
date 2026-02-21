@@ -15,34 +15,20 @@ public class MatchIngestionService(
 
         await using var db = await dbFactory.CreateDbContextAsync();
 
-        // Upsert today's session
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var session = await db.GameSessions.FirstOrDefaultAsync(s => s.SessionDate == today);
-        if (session is null)
+        var session = await EnsureSessionAsync(db);
+        var matchGuid = data.MatchGuid.ToString();
+
+        if (!await db.Matches.AnyAsync(m => m.MatchGuid == matchGuid))
         {
-            session = new GameSession { SessionDate = today };
-            db.GameSessions.Add(session);
+            var match = new Match { GameSessionId = session.Id, QLServerId = serverId };
+            match.Apply(data);
+            db.Matches.Add(match);
             await db.SaveChangesAsync();
         }
 
-        // Create match idempotently
-        var existing = await db.Matches.FirstOrDefaultAsync(m => m.MatchGuid == data.MatchGuid);
-        if (existing is null)
-        {
-            db.Matches.Add(new Match
-            {
-                GameSessionId = session.Id,
-                QLServerId = serverId,
-                MatchGuid = data.MatchGuid,
-                Map = data.Map,
-                GameType = data.GameType,
-                ServerTitle = data.ServerTitle,
-                StartedAt = DateTime.UtcNow
-            });
-            await db.SaveChangesAsync();
-        }
-
-        liveMatch.StartMatch(data.MatchGuid, data.Map, data.GameType, serverName);
+        var livePlayers = data.Players?.Select(p =>
+            (p.SteamId, p.Name, p.Team == 1 ? "RED" : p.Team == 2 ? "BLUE" : ""));
+        liveMatch.StartMatch(matchGuid, data.Map, data.GameType, serverName, livePlayers);
     }
 
     public async Task HandleMatchReportAsync(MatchReportData data, int serverId)
@@ -52,48 +38,31 @@ public class MatchIngestionService(
 
         await using var db = await dbFactory.CreateDbContextAsync();
 
-        var match = await db.Matches.FirstOrDefaultAsync(m => m.MatchGuid == data.MatchGuid);
+        var matchGuid = data.MatchGuid.ToString();
+        var match = await db.Matches.FirstOrDefaultAsync(m => m.MatchGuid == matchGuid);
         if (match is null)
         {
-            logger.LogWarning("Match {MatchGuid} not found for report; creating it", data.MatchGuid);
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
-            var session = await db.GameSessions.FirstOrDefaultAsync(s => s.SessionDate == today);
-            if (session is null)
-            {
-                session = new GameSession { SessionDate = today };
-                db.GameSessions.Add(session);
-                await db.SaveChangesAsync();
-            }
-            match = new Match
-            {
-                GameSessionId = session.Id,
-                QLServerId = serverId,
-                MatchGuid = data.MatchGuid,
-                Map = data.Map,
-                GameType = data.GameType,
-                ServerTitle = data.ServerTitle,
-                StartedAt = DateTime.UtcNow
-            };
+            logger.LogWarning("Match {MatchGuid} not found for report; creating it", matchGuid);
+            var session = await EnsureSessionAsync(db);
+            match = new Match { GameSessionId = session.Id, QLServerId = serverId };
             db.Matches.Add(match);
-            await db.SaveChangesAsync();
         }
 
-        match.FinishedAt = DateTime.UtcNow;
-        match.TeamRedRounds = data.Tscore0;
-        match.TeamBlueRounds = data.Tscore1;
+        match.Apply(data);
 
         // Back-fill rounds on any MatchPlayers already created by PLAYER_STATS events
-        var existingPlayers = await db.MatchPlayers
-            .Where(mp => mp.MatchId == match.Id)
-            .ToListAsync();
-
-        foreach (var mp in existingPlayers)
+        var players = await db.MatchPlayers.Where(mp => mp.MatchId == match.Id).ToListAsync();
+        foreach (var mp in players)
         {
             mp.RoundsWon = mp.Team == "RED" ? data.Tscore0 : data.Tscore1;
             mp.RoundsLost = mp.Team == "RED" ? data.Tscore1 : data.Tscore0;
         }
 
         await db.SaveChangesAsync();
+
+        if (liveMatch.Current?.MatchGuid == matchGuid || liveMatch.Current?.Map == "")
+            liveMatch.UpdateMatchInfo(data.Map, data.GameType, data.ServerTitle);
+
         liveMatch.EndMatch();
     }
 
@@ -103,57 +72,32 @@ public class MatchIngestionService(
 
         await using var db = await dbFactory.CreateDbContextAsync();
 
-        var match = await db.Matches.FirstOrDefaultAsync(m => m.MatchGuid == data.MatchGuid);
+        var matchGuid = data.MatchGuid.ToString();
+        var match = await db.Matches.FirstOrDefaultAsync(m => m.MatchGuid == matchGuid);
         if (match is null)
         {
             logger.LogWarning("Match {MatchGuid} not found for PLAYER_STATS (player {SteamId})",
-                data.MatchGuid, data.SteamId);
+                matchGuid, data.SteamId);
             return;
         }
 
         var player = await EnsurePlayerAsync(db, data.SteamId, data.Name);
-        var teamStr = data.Team == 1 ? "RED" : data.Team == 2 ? "BLUE" : "FREE";
+        var mp = await db.MatchPlayers
+            .FirstOrDefaultAsync(x => x.MatchId == match.Id && x.PlayerId == player.Id);
 
-        var existing = await db.MatchPlayers
-            .FirstOrDefaultAsync(mp => mp.MatchId == match.Id && mp.PlayerId == player.Id);
-
-        if (existing is null)
+        if (mp is null)
         {
-            var mp = new MatchPlayer
-            {
-                MatchId = match.Id,
-                PlayerId = player.Id,
-                Team = teamStr,
-                Won = data.Won,
-                Kills = data.Kills,
-                Deaths = data.Deaths,
-                DamageDealt = data.DamageDealt,
-                DamageTaken = data.DamageTaken
-            };
-
-            // Populate rounds if MATCH_REPORT already arrived
-            if (match.TeamRedRounds.HasValue && match.TeamBlueRounds.HasValue)
-            {
-                mp.RoundsWon = teamStr == "RED" ? match.TeamRedRounds.Value : match.TeamBlueRounds.Value;
-                mp.RoundsLost = teamStr == "RED" ? match.TeamBlueRounds.Value : match.TeamRedRounds.Value;
-            }
-
+            mp = new MatchPlayer { MatchId = match.Id, PlayerId = player.Id };
             db.MatchPlayers.Add(mp);
         }
-        else
-        {
-            existing.Team = teamStr;
-            existing.Won = data.Won;
-            existing.Kills = data.Kills;
-            existing.Deaths = data.Deaths;
-            existing.DamageDealt = data.DamageDealt;
-            existing.DamageTaken = data.DamageTaken;
 
-            if (match.TeamRedRounds.HasValue && match.TeamBlueRounds.HasValue)
-            {
-                existing.RoundsWon = teamStr == "RED" ? match.TeamRedRounds.Value : match.TeamBlueRounds.Value;
-                existing.RoundsLost = teamStr == "RED" ? match.TeamBlueRounds.Value : match.TeamRedRounds.Value;
-            }
+        mp.Apply(data);
+
+        // Populate rounds if MATCH_REPORT already arrived
+        if (match.TeamRedRounds.HasValue && match.TeamBlueRounds.HasValue)
+        {
+            mp.RoundsWon = mp.Team == "RED" ? match.TeamRedRounds.Value : match.TeamBlueRounds.Value;
+            mp.RoundsLost = mp.Team == "RED" ? match.TeamBlueRounds.Value : match.TeamRedRounds.Value;
         }
 
         await db.SaveChangesAsync();
@@ -161,30 +105,40 @@ public class MatchIngestionService(
 
     public async Task HandlePlayerKillAsync(PlayerKillData data)
     {
-        liveMatch.RecordKill(data.KillerSteamId, data.KillerName, data.VictimSteamId, data.VictimName, data.Mod);
+        if (data.Warmup) return;
+
+        if (liveMatch.Current is null && data.MatchGuid != Guid.Empty)
+            liveMatch.StartMatch(data.MatchGuid.ToString(), "", "", "");
+
+        liveMatch.RecordKill(
+            data.Killer?.SteamId ?? "", data.Killer?.Name ?? "",
+            data.Victim?.SteamId ?? "", data.Victim?.Name ?? "",
+            data.Mod);
+
         await Task.CompletedTask;
     }
 
     public async Task HandleRoundOverAsync(RoundOverData data)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        var match = await db.Matches.FirstOrDefaultAsync(m => m.MatchGuid == data.MatchGuid);
+        var matchGuid = data.MatchGuid.ToString();
+        var match = await db.Matches.FirstOrDefaultAsync(m => m.MatchGuid == matchGuid);
         if (match is not null)
         {
-            var existing = await db.RoundResults
-                .FirstOrDefaultAsync(r => r.MatchId == match.Id && r.RoundNumber == data.RoundNumber);
-            if (existing is null)
+            var exists = await db.RoundResults
+                .AnyAsync(r => r.MatchId == match.Id && r.RoundNumber == data.Round);
+            if (!exists)
             {
                 db.RoundResults.Add(new RoundResult
                 {
                     MatchId = match.Id,
-                    RoundNumber = data.RoundNumber,
-                    TeamWon = data.WinningTeam
+                    RoundNumber = data.Round,
+                    TeamWon = data.TeamWon
                 });
                 await db.SaveChangesAsync();
             }
         }
-        liveMatch.RecordRoundOver(data.WinningTeam == "RED" ? 1 : 2, data.RoundNumber);
+        liveMatch.RecordRoundOver(data.TeamWon == "RED" ? 1 : 2, data.Round);
     }
 
     public async Task HandlePlayerConnectAsync(PlayerConnectData data)
@@ -192,6 +146,18 @@ public class MatchIngestionService(
         await using var db = await dbFactory.CreateDbContextAsync();
         await EnsurePlayerAsync(db, data.SteamId, data.Name);
         await db.SaveChangesAsync();
+    }
+
+    private static async Task<GameSession> EnsureSessionAsync(AppDbContext db)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var session = await db.GameSessions.FirstOrDefaultAsync(s => s.SessionDate == today);
+        if (session is not null) return session;
+
+        session = new GameSession { SessionDate = today };
+        db.GameSessions.Add(session);
+        await db.SaveChangesAsync();
+        return session;
     }
 
     private static async Task<Player> EnsurePlayerAsync(AppDbContext db, string steamId, string name)
