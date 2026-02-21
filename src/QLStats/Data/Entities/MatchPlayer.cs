@@ -10,6 +10,7 @@ public class MatchPlayer
     public int Kills { get; set; }
     public int Deaths { get; set; }
     public int DamageDealt { get; set; }
+    public int DamageTaken { get; set; }
     public int RoundsWon { get; set; }
     public int RoundsLost { get; set; }
 
