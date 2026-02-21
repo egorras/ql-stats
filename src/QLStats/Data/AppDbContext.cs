@@ -13,6 +13,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<MatchPlayer> MatchPlayers => Set<MatchPlayer>();
     public DbSet<RoundResult> RoundResults => Set<RoundResult>();
     public DbSet<ZmqEvent> ZmqEvents => Set<ZmqEvent>();
+    public DbSet<ScoringRule> ScoringRules => Set<ScoringRule>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -34,13 +35,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<Season>(e =>
         {
             e.Property(s => s.Name).HasMaxLength(128);
-            e.Property(s => s.PointsPerKill).HasPrecision(10, 4);
-            e.Property(s => s.PointsPerDeath).HasPrecision(10, 4);
-            e.Property(s => s.PointsPerWin).HasPrecision(10, 4);
-            e.Property(s => s.PointsPerLoss).HasPrecision(10, 4);
-            e.Property(s => s.PointsPerRoundWon).HasPrecision(10, 4);
-            e.Property(s => s.PointsPerRoundLost).HasPrecision(10, 4);
-            e.Property(s => s.PointsPerDamageDealt).HasPrecision(10, 6);
         });
 
         modelBuilder.Entity<GameSession>(e =>
@@ -103,6 +97,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany(s => s.ZmqEvents)
                 .HasForeignKey(z => z.QLServerId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ScoringRule>(e =>
+        {
+            e.Property(r => r.Value).HasPrecision(10, 6);
+            e.Property(r => r.Threshold).HasPrecision(10, 6);
+            e.Property(r => r.GameTypeFilter).HasMaxLength(32);
+            e.HasOne(r => r.Season)
+                .WithMany(s => s.Rules)
+                .HasForeignKey(r => r.SeasonId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

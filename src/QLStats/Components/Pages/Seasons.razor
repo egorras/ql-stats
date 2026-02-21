@@ -49,30 +49,44 @@
             <MudDatePicker Label="End Date (optional)" @bind-Date="_endDate" Class="mb-3" />
             <MudSwitch T="bool" @bind-Value="_editSeason.IsActive" Label="Active" Color="Color.Success" Class="mb-3" />
 
-            <MudText Typo="Typo.subtitle2" Class="mt-2 mb-2">Scoring Formula</MudText>
-            <MudGrid>
-                <MudItem xs="6">
-                    <MudNumericField Label="Points per Kill" @bind-Value="_editSeason.PointsPerKill" Format="0.####" />
-                </MudItem>
-                <MudItem xs="6">
-                    <MudNumericField Label="Points per Death" @bind-Value="_editSeason.PointsPerDeath" Format="0.####" />
-                </MudItem>
-                <MudItem xs="6">
-                    <MudNumericField Label="Points per Win" @bind-Value="_editSeason.PointsPerWin" Format="0.####" />
-                </MudItem>
-                <MudItem xs="6">
-                    <MudNumericField Label="Points per Loss" @bind-Value="_editSeason.PointsPerLoss" Format="0.####" />
-                </MudItem>
-                <MudItem xs="6">
-                    <MudNumericField Label="Points per Round Won" @bind-Value="_editSeason.PointsPerRoundWon" Format="0.####" />
-                </MudItem>
-                <MudItem xs="6">
-                    <MudNumericField Label="Points per Round Lost" @bind-Value="_editSeason.PointsPerRoundLost" Format="0.####" />
-                </MudItem>
-                <MudItem xs="12">
-                    <MudNumericField Label="Points per Damage Dealt" @bind-Value="_editSeason.PointsPerDamageDealt" Format="0.######" />
-                </MudItem>
-            </MudGrid>
+            <MudDivider Class="my-4" />
+            <div class="d-flex align-center justify-space-between mb-2">
+                <MudText Typo="Typo.h6">Scoring Rules</MudText>
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="AddRule">Add Rule</MudButton>
+            </div>
+
+            @foreach (var rule in _editSeason.Rules.OrderBy(r => r.SortOrder))
+            {
+                <MudPaper Class="pa-2 mb-2" Outlined="true">
+                    <MudGrid Spacing="1">
+                        <MudItem xs="8">
+                            <MudSelect T="ScoringRuleType" Label="Rule Type" @bind-Value="rule.Type" Margin="Margin.Dense">
+                                @foreach (var val in Enum.GetValues<ScoringRuleType>())
+                                {
+                                    <MudSelectItem Value="@val">@GetRuleLabel(val)</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="4" Class="d-flex align-center justify-end">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => _editSeason.Rules.Remove(rule))" />
+                        </MudItem>
+                        
+                        <MudItem xs="3">
+                            <MudNumericField Label="Value" @bind-Value="rule.Value" Margin="Margin.Dense" Format="0.####" />
+                        </MudItem>
+                        <MudItem xs="3">
+                            <MudNumericField Label="Threshold" @bind-Value="rule.Threshold" Margin="Margin.Dense" 
+                                Disabled="@(!IsThresholdRule(rule.Type))" />
+                        </MudItem>
+                        <MudItem xs="3">
+                            <MudTextField Label="Filter (GT)" @bind-Value="rule.GameTypeFilter" Placeholder="e.g. CA" Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="3">
+                            <MudNumericField Label="Order" @bind-Value="rule.SortOrder" Margin="Margin.Dense" />
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            }
         </MudForm>
     </DialogContent>
     <DialogActions>
@@ -98,17 +112,32 @@
 
     private async Task LoadAsync()
     {
-        _seasons = await Db.Seasons.OrderByDescending(s => s.IsActive).ThenByDescending(s => s.StartDate).ToListAsync();
+        _seasons = await Db.Seasons.Include(s => s.Rules).OrderByDescending(s => s.IsActive).ThenByDescending(s => s.StartDate).ToListAsync();
         _loading = false;
     }
 
     private void OpenAddDialog()
     {
+        var lastSeason = _seasons.OrderByDescending(s => s.StartDate).FirstOrDefault();
+        
         _editSeason = new Season
         {
             StartDate = DateOnly.FromDateTime(DateTime.Today),
-            PointsPerKill = 1, PointsPerDeath = -0.5m, PointsPerWin = 5,
-            PointsPerRoundWon = 0.5m, PointsPerDamageDealt = 0.01m
+            Rules = lastSeason?.Rules.OrderBy(r => r.SortOrder).Select(r => new ScoringRule
+            {
+                Type = r.Type,
+                Value = r.Value,
+                Threshold = r.Threshold,
+                GameTypeFilter = r.GameTypeFilter,
+                SortOrder = r.SortOrder
+            }).ToList() ?? new List<ScoringRule>
+            {
+                new() { Type = ScoringRuleType.KillsMultiplier, Value = 1, SortOrder = 0 },
+                new() { Type = ScoringRuleType.DeathsMultiplier, Value = -0.5m, SortOrder = 1 },
+                new() { Type = ScoringRuleType.WinsBonus, Value = 5, SortOrder = 2 },
+                new() { Type = ScoringRuleType.RoundsWonMultiplier, Value = 0.5m, SortOrder = 3 },
+                new() { Type = ScoringRuleType.DamageMultiplier, Value = 0.01m, SortOrder = 4 }
+            }
         };
         _startDate = _editSeason.StartDate.ToDateTime(TimeOnly.MinValue);
         _endDate = null;
@@ -120,15 +149,41 @@
         _editSeason = new Season
         {
             Id = s.Id, Name = s.Name, StartDate = s.StartDate, EndDate = s.EndDate,
-            IsActive = s.IsActive, PointsPerKill = s.PointsPerKill, PointsPerDeath = s.PointsPerDeath,
-            PointsPerWin = s.PointsPerWin, PointsPerLoss = s.PointsPerLoss,
-            PointsPerRoundWon = s.PointsPerRoundWon, PointsPerRoundLost = s.PointsPerRoundLost,
-            PointsPerDamageDealt = s.PointsPerDamageDealt
+            IsActive = s.IsActive,
+            Rules = s.Rules.OrderBy(r => r.SortOrder).Select(r => new ScoringRule
+            {
+                Id = r.Id, Type = r.Type,
+                Value = r.Value, Threshold = r.Threshold, GameTypeFilter = r.GameTypeFilter,
+                SortOrder = r.SortOrder
+            }).ToList()
         };
         _startDate = s.StartDate.ToDateTime(TimeOnly.MinValue);
         _endDate = s.EndDate?.ToDateTime(TimeOnly.MinValue);
         _dialogOpen = true;
     }
+
+    private void AddRule()
+    {
+        var nextOrder = _editSeason.Rules.Count > 0 ? _editSeason.Rules.Max(r => r.SortOrder) + 1 : 0;
+        _editSeason.Rules.Add(new ScoringRule { Type = ScoringRuleType.KillsMultiplier, Value = 1, SortOrder = nextOrder });
+    }
+
+    private string GetRuleLabel(ScoringRuleType type) => type switch
+    {
+        ScoringRuleType.KillsMultiplier => "Kills Multiplier",
+        ScoringRuleType.DeathsMultiplier => "Deaths Multiplier",
+        ScoringRuleType.DamageMultiplier => "Damage Multiplier",
+        ScoringRuleType.WinsBonus => "Win Bonus",
+        ScoringRuleType.LossesBonus => "Loss Bonus",
+        ScoringRuleType.RoundsWonMultiplier => "Rounds Won Multiplier",
+        ScoringRuleType.RoundsLostMultiplier => "Rounds Lost Multiplier",
+        ScoringRuleType.DamageThresholdBonus => "Damage Threshold Bonus",
+        ScoringRuleType.KillsThresholdBonus => "Kills Threshold Bonus",
+        _ => type.ToString()
+    };
+
+    private bool IsThresholdRule(ScoringRuleType type) => 
+        type == ScoringRuleType.DamageThresholdBonus || type == ScoringRuleType.KillsThresholdBonus;
 
     private async Task SaveSeasonAsync()
     {
@@ -147,20 +202,25 @@
         }
         else
         {
-            var existing = await Db.Seasons.FindAsync(_editSeason.Id);
+            var existing = await Db.Seasons.Include(s => s.Rules).FirstOrDefaultAsync(s => s.Id == _editSeason.Id);
             if (existing is not null)
             {
                 existing.Name = _editSeason.Name;
                 existing.StartDate = _editSeason.StartDate;
                 existing.EndDate = _editSeason.EndDate;
                 existing.IsActive = _editSeason.IsActive;
-                existing.PointsPerKill = _editSeason.PointsPerKill;
-                existing.PointsPerDeath = _editSeason.PointsPerDeath;
-                existing.PointsPerWin = _editSeason.PointsPerWin;
-                existing.PointsPerLoss = _editSeason.PointsPerLoss;
-                existing.PointsPerRoundWon = _editSeason.PointsPerRoundWon;
-                existing.PointsPerRoundLost = _editSeason.PointsPerRoundLost;
-                existing.PointsPerDamageDealt = _editSeason.PointsPerDamageDealt;
+
+                // Sync rules
+                existing.Rules.Clear();
+                foreach (var r in _editSeason.Rules)
+                {
+                    existing.Rules.Add(new ScoringRule
+                    {
+                        Type = r.Type,
+                        Value = r.Value, Threshold = r.Threshold, GameTypeFilter = r.GameTypeFilter,
+                        SortOrder = r.SortOrder
+                    });
+                }
             }
         }
         await Db.SaveChangesAsync();

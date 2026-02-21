@@ -45,16 +45,7 @@ public class QlStatsMcpTools(AppDbContext db, StandingsService standings)
             s.RoundsLost,
             s.DamageDealt,
             s.MatchesPlayed,
-            Breakdown = new
-            {
-                FromKills = Math.Round(s.PointsFromKills, 2),
-                FromDeaths = Math.Round(s.PointsFromDeaths, 2),
-                FromWins = Math.Round(s.PointsFromWins, 2),
-                FromLosses = Math.Round(s.PointsFromLosses, 2),
-                FromRoundsWon = Math.Round(s.PointsFromRoundsWon, 2),
-                FromRoundsLost = Math.Round(s.PointsFromRoundsLost, 2),
-                FromDamage = Math.Round(s.PointsFromDamage, 2),
-            }
+            Breakdown = s.RulesBreakdown.ToDictionary(kvp => kvp.Key, kvp => Math.Round(kvp.Value, 2))
         }).ToList();
     }
 
@@ -147,7 +138,6 @@ public class QlStatsMcpTools(AppDbContext db, StandingsService standings)
             FinishedAt = match.FinishedAt?.ToString("yyyy-MM-dd HH:mm"),
             match.TeamRedRounds,
             match.TeamBlueRounds,
-            match.IsManualEntry,
             Players = match.MatchPlayers.Select(mp => new
             {
                 mp.Player.DisplayName,

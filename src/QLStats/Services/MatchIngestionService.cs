@@ -37,8 +37,7 @@ public class MatchIngestionService(
                 Map = data.Map,
                 GameType = data.GameType,
                 ServerTitle = data.ServerTitle,
-                StartedAt = DateTime.UtcNow,
-                IsManualEntry = false
+                StartedAt = DateTime.UtcNow
             });
             await db.SaveChangesAsync();
         }
@@ -72,8 +71,7 @@ public class MatchIngestionService(
                 Map = data.Map,
                 GameType = data.GameType,
                 ServerTitle = data.ServerTitle,
-                StartedAt = DateTime.UtcNow,
-                IsManualEntry = false
+                StartedAt = DateTime.UtcNow
             };
             db.Matches.Add(match);
             await db.SaveChangesAsync();

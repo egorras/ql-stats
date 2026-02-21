@@ -15,7 +15,6 @@ else
     <MudText Typo="Typo.h4" Class="mb-1">@_match.Map</MudText>
     <MudText Color="Color.Secondary" Class="mb-4">
         @_match.StartedAt.ToString("yyyy-MM-dd HH:mm") · @_match.ServerTitle
-        @if (_match.IsManualEntry) { <MudChip T="string" Size="Size.Small" Color="Color.Warning">Manual</MudChip> }
     </MudText>
 
     <MudPaper Class="pa-4 mb-4" Elevation="1">

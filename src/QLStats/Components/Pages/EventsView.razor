@@ -1,0 +1,129 @@
+@page "/admin/events"
+@page "/servers/{ServerId:int}/events"
+@using QLStats.Data
+@using QLStats.Data.Entities
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+
+<PageTitle>ZMQ Events — QL Stats</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">
+    @(ServerId.HasValue ? $"Server Events: {_server?.Name ?? ServerId.Value.ToString()}" : "All ZMQ Events")
+</MudText>
+
+<MudTable T="ZmqEvent" ServerData="@(new Func<TableState, CancellationToken, Task<TableData<ZmqEvent>>>(ReloadData))"
+          Dense="true" Hover="true" @ref="_table" FixedHeader="true" Height="calc(100vh - 250px)">
+    <HeaderContent>
+        <MudTh>Time</MudTh>
+        @if (!ServerId.HasValue)
+        {
+            <MudTh>Server</MudTh>
+        }
+        <MudTh>Type</MudTh>
+        <MudTh>Processed</MudTh>
+        <MudTh>Raw JSON</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.ReceivedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
+        @if (!ServerId.HasValue)
+        {
+            <MudTd>@context.QLServer.Name</MudTd>
+        }
+        <MudTd><code>@context.EventType</code></MudTd>
+        <MudTd>
+            <MudIcon Icon="@(context.Processed ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Pending)" 
+                     Color="@(context.Processed ? Color.Success : Color.Warning)" Size="Size.Small" />
+        </MudTd>
+        <MudTd>
+            <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => ShowJson(context))">View JSON</MudButton>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No events found.</MudText>
+    </NoRecordsContent>
+    <LoadingContent>
+        <MudText>Loading events...</MudText>
+    </LoadingContent>
+    <PagerContent>
+        <MudTablePager />
+    </PagerContent>
+</MudTable>
+
+<MudDialog @bind-Visible="_dialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Event JSON: @_selectedEvent?.EventType</MudText>
+    </TitleContent>
+    <DialogContent>
+        <div style="max-height: 500px; overflow: auto; background-color: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; font-family: monospace; font-size: 0.85rem;">
+            <pre>@_prettyJson</pre>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" OnClick="@(() => _dialogVisible = false)">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter] public int? ServerId { get; set; }
+
+    private QLServer? _server;
+    private MudTable<ZmqEvent>? _table;
+    private bool _dialogVisible;
+    private ZmqEvent? _selectedEvent;
+    private string _prettyJson = "";
+    private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ServerId.HasValue)
+        {
+            _server = await Db.QLServers.FindAsync(ServerId.Value);
+        }
+        else
+        {
+            _server = null;
+        }
+        
+        if (_table != null)
+        {
+            await _table.ReloadServerData();
+        }
+    }
+
+    private async Task<TableData<ZmqEvent>> ReloadData(TableState state, CancellationToken token)
+    {
+        var query = Db.ZmqEvents
+            .Include(e => e.QLServer)
+            .AsQueryable();
+
+        if (ServerId.HasValue)
+        {
+            query = query.Where(e => e.QLServerId == ServerId.Value);
+        }
+
+        var totalItems = await query.CountAsync(token);
+
+        var items = await query
+            .OrderByDescending(e => e.Id)
+            .Skip(state.Page * state.PageSize)
+            .Take(state.PageSize)
+            .ToListAsync(token);
+
+        return new TableData<ZmqEvent> { TotalItems = totalItems, Items = items };
+    }
+
+    private void ShowJson(ZmqEvent e)
+    {
+        _selectedEvent = e;
+        try
+        {
+            var obj = System.Text.Json.JsonSerializer.Deserialize<object>(e.RawJson);
+            _prettyJson = System.Text.Json.JsonSerializer.Serialize(obj, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        }
+        catch
+        {
+            _prettyJson = e.RawJson;
+        }
+        _dialogVisible = true;
+    }
+}

@@ -8,13 +8,7 @@ public record PlayerStanding(
     string DisplayName,
     decimal TotalPoints,
     // breakdown
-    decimal PointsFromKills,
-    decimal PointsFromDeaths,
-    decimal PointsFromWins,
-    decimal PointsFromLosses,
-    decimal PointsFromRoundsWon,
-    decimal PointsFromRoundsLost,
-    decimal PointsFromDamage,
+    Dictionary<string, decimal> RulesBreakdown,
     // raw stats
     int Kills,
     int Deaths,
@@ -30,7 +24,9 @@ public class StandingsService(AppDbContext db)
 {
     public async Task<List<PlayerStanding>> GetSeasonStandingsAsync(int seasonId)
     {
-        var season = await db.Seasons.FindAsync(seasonId)
+        var season = await db.Seasons
+            .Include(s => s.Rules)
+            .FirstOrDefaultAsync(s => s.Id == seasonId)
             ?? throw new InvalidOperationException($"Season {seasonId} not found");
 
         // Load all match players for sessions in this season
@@ -54,25 +50,27 @@ public class StandingsService(AppDbContext db)
             var roundsLost = g.Sum(mp => mp.RoundsLost);
             var damage = g.Sum(mp => mp.DamageDealt);
 
-            var fromKills = kills * season.PointsPerKill;
-            var fromDeaths = deaths * season.PointsPerDeath;
-            var fromWins = wins * season.PointsPerWin;
-            var fromLosses = losses * season.PointsPerLoss;
-            var fromRoundsWon = roundsWon * season.PointsPerRoundWon;
-            var fromRoundsLost = roundsLost * season.PointsPerRoundLost;
-            var fromDamage = damage * season.PointsPerDamageDealt;
+            var ruleBreakdown = new Dictionary<string, decimal>();
+            decimal totalPoints = 0;
+
+            foreach (var mp in g)
+            {
+                var (points, bd) = ScoringEngine.CalculatePointsWithBreakdown(mp, season);
+                totalPoints += points;
+                foreach (var (key, value) in bd)
+                {
+                    if (ruleBreakdown.ContainsKey(key))
+                        ruleBreakdown[key] += value;
+                    else
+                        ruleBreakdown[key] = value;
+                }
+            }
 
             return new PlayerStanding(
                 PlayerId: g.Key.PlayerId,
                 DisplayName: g.Key.DisplayName,
-                TotalPoints: fromKills + fromDeaths + fromWins + fromLosses + fromRoundsWon + fromRoundsLost + fromDamage,
-                PointsFromKills: fromKills,
-                PointsFromDeaths: fromDeaths,
-                PointsFromWins: fromWins,
-                PointsFromLosses: fromLosses,
-                PointsFromRoundsWon: fromRoundsWon,
-                PointsFromRoundsLost: fromRoundsLost,
-                PointsFromDamage: fromDamage,
+                TotalPoints: totalPoints,
+                RulesBreakdown: ruleBreakdown,
                 Kills: kills,
                 Deaths: deaths,
                 Wins: wins,

@@ -13,7 +13,6 @@ public class Match
     public DateTime? FinishedAt { get; set; }
     public int? TeamRedRounds { get; set; }
     public int? TeamBlueRounds { get; set; }
-    public bool IsManualEntry { get; set; }
 
     public GameSession GameSession { get; set; } = null!;
     public QLServer QLServer { get; set; } = null!;

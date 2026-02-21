@@ -18,16 +18,15 @@ else
         @_season.StartDate — @(_season.EndDate?.ToString() ?? "ongoing")
     </MudText>
 
-    <MudText Typo="Typo.h6" Class="mb-2">Scoring Formula</MudText>
+    <MudText Typo="Typo.h6" Class="mb-2">Scoring Rules</MudText>
     <MudPaper Class="pa-3 mb-4" Elevation="0" Outlined="true">
         <MudGrid>
-            <MudItem xs="6" sm="3"><MudText>Kill: <strong>+@_season.PointsPerKill</strong></MudText></MudItem>
-            <MudItem xs="6" sm="3"><MudText>Death: <strong>@_season.PointsPerDeath</strong></MudText></MudItem>
-            <MudItem xs="6" sm="3"><MudText>Win: <strong>+@_season.PointsPerWin</strong></MudText></MudItem>
-            <MudItem xs="6" sm="3"><MudText>Loss: <strong>@_season.PointsPerLoss</strong></MudText></MudItem>
-            <MudItem xs="6" sm="3"><MudText>Round Won: <strong>+@_season.PointsPerRoundWon</strong></MudText></MudItem>
-            <MudItem xs="6" sm="3"><MudText>Round Lost: <strong>@_season.PointsPerRoundLost</strong></MudText></MudItem>
-            <MudItem xs="6" sm="3"><MudText>Damage: <strong>×@_season.PointsPerDamageDealt</strong></MudText></MudItem>
+            @foreach (var rule in _season.Rules.OrderBy(r => r.SortOrder))
+            {
+                <MudItem xs="6" sm="4" md="3">
+                    <MudText>• @rule.GetRuleDescription()</MudText>
+                </MudItem>
+            }
         </MudGrid>
     </MudPaper>
 
@@ -81,7 +80,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        _season = await Db.Seasons.FindAsync(SeasonId);
+        _season = await Db.Seasons.Include(s => s.Rules).FirstOrDefaultAsync(s => s.Id == SeasonId);
         if (_season is not null)
         {
             try { _standings = await StandingsService.GetSeasonStandingsAsync(SeasonId); }
@@ -89,9 +88,8 @@ else
         }
     }
 
-    private string GetBreakdownTooltip(PlayerStanding s) =>
-        $"Kills: {s.PointsFromKills:0.##} | Deaths: {s.PointsFromDeaths:0.##} | " +
-        $"Wins: {s.PointsFromWins:0.##} | Losses: {s.PointsFromLosses:0.##} | " +
-        $"Rounds W: {s.PointsFromRoundsWon:0.##} | Rounds L: {s.PointsFromRoundsLost:0.##} | " +
-        $"Damage: {s.PointsFromDamage:0.##}";
+    private string GetBreakdownTooltip(PlayerStanding s)
+    {
+        return string.Join(" | ", s.RulesBreakdown.Select(kvp => $"{kvp.Key}: {kvp.Value:0.##}"));
+    }
 }
