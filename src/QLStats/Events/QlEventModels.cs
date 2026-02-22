@@ -98,16 +98,6 @@ public record PlayerMedalData : QlEvent
     public int Total { get; init; }
 }
 
-// Envelope — STJ uses TYPE as the discriminator to pick the derived type,
-// then deserializes DATA into TData automatically.
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "TYPE")]
-[JsonDerivedType(typeof(QlEnvelope<MatchStartedData>),  "MATCH_STARTED")]
-[JsonDerivedType(typeof(QlEnvelope<MatchReportData>),   "MATCH_REPORT")]
-[JsonDerivedType(typeof(QlEnvelope<PlayerKillData>),    "PLAYER_KILL")]
-[JsonDerivedType(typeof(QlEnvelope<RoundOverData>),     "ROUND_OVER")]
-[JsonDerivedType(typeof(QlEnvelope<PlayerStatsData>),   "PLAYER_STATS")]
-[JsonDerivedType(typeof(QlEnvelope<PlayerConnectData>), "PLAYER_CONNECT")]
-[JsonDerivedType(typeof(QlEnvelope<PlayerMedalData>),   "PLAYER_MEDAL")]
 public abstract record QlEnvelope
 {
     public abstract QlEvent? GetEvent();

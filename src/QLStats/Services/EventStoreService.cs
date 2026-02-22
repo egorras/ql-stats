@@ -7,13 +7,10 @@ namespace QLStats.Services;
 
 public class EventStoreService(IDbContextFactory<AppDbContext> dbFactory, ILogger<EventStoreService> logger)
 {
-    public async Task<long> StoreAsync(int serverId, string rawJson)
+    public async Task<long> StoreAsync(int serverId, string eventType, string rawJson)
     {
         try
         {
-            using var doc = JsonDocument.Parse(rawJson);
-            var eventType = doc.RootElement.TryGetProperty("TYPE", out var t) ? t.GetString() ?? "" : "";
-
             await using var db = await dbFactory.CreateDbContextAsync();
             var ev = new ZmqEvent
             {

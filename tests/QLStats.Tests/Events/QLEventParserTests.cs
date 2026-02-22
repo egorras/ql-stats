@@ -290,18 +290,16 @@ public class QLEventParserTests
     // ── Unknown / missing TYPE ────────────────────────────────────────────────
 
     [Fact]
-    public void Parse_UnknownType_ThrowsJsonException()
+    public void Parse_UnknownType_ReturnsNull()
     {
-        // STJ's polymorphic resolver throws when it encounters an unregistered discriminator.
         var json = """{ "TYPE": "UNKNOWN_EVENT", "DATA": {} }""";
 
-        Assert.Throws<System.Text.Json.JsonException>(() => QLEventParser.Parse(json));
+        Assert.Null(QLEventParser.Parse(json));
     }
 
     [Fact]
-    public void Parse_NoTypeDiscriminator_ThrowsNotSupportedException()
+    public void Parse_NoTypeDiscriminator_ReturnsNull()
     {
-        // STJ requires a TYPE discriminator for the abstract QlEnvelope; missing one throws.
-        Assert.Throws<System.NotSupportedException>(() => QLEventParser.Parse("{}"));
+        Assert.Null(QLEventParser.Parse("{}"));
     }
 }

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using NetMQ;
 using NetMQ.Sockets;
@@ -92,11 +93,10 @@ public class ZmqListenerService(
 
                 while (!ct.IsCancellationRequested)
                 {
-                    if (socket.TryReceiveFrameString(TimeSpan.FromSeconds(1), out var topic) &&
-                        socket.TryReceiveFrameString(TimeSpan.FromMilliseconds(500), out var payload))
+                    if (socket.TryReceiveFrameString(TimeSpan.FromSeconds(1), out var payload))
                     {
                         UpdateStatus(serverId, lastMessageAt: DateTime.UtcNow);
-                        _ = ProcessMessageAsync(serverId, topic!, payload!);
+                        _ = ProcessMessageAsync(serverId, payload);
                     }
                 }
             }
@@ -121,23 +121,39 @@ public class ZmqListenerService(
         }
     }
 
-    private async Task ProcessMessageAsync(int serverId, string topic, string payload)
+    private async Task ProcessMessageAsync(int serverId, string payload)
     {
         try
         {
-            var @event = QLEventParser.Parse(payload)?.GetEvent();
+            var envelope = QLEventParser.Parse(payload);
+            var eventType = envelope switch
+            {
+                QlEnvelope<MatchStartedData>  => "MATCH_STARTED",
+                QlEnvelope<MatchReportData>   => "MATCH_REPORT",
+                QlEnvelope<PlayerKillData>    => "PLAYER_KILL",
+                QlEnvelope<RoundOverData>     => "ROUND_OVER",
+                QlEnvelope<PlayerStatsData>   => "PLAYER_STATS",
+                QlEnvelope<PlayerConnectData> => "PLAYER_CONNECT",
+                QlEnvelope<PlayerMedalData>   => "PLAYER_MEDAL",
+                _ => "UNKNOWN"
+            };
+            var @event = envelope?.GetEvent();
 
-            // Warmup events update server last-seen (tracked before this call) but are not stored
+            // Warmup events update server last-seen but are not stored or ingested for stats
             if (@event?.Warmup == true) return;
 
-            var eventId = await eventStore.StoreAsync(serverId, payload);
+            var eventId = await eventStore.StoreAsync(serverId, eventType, payload);
+
             if (@event is not null)
+            {
                 await ingestion.HandleAsync(@event, serverId);
+            }
+                
             await eventStore.MarkProcessedAsync(eventId);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error processing ZMQ message type '{Topic}' from server {ServerId}", topic, serverId);
+            logger.LogError(ex, "Error processing ZMQ message from server {ServerId}", serverId);
         }
     }
 }

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using QLStats.Data;
 using QLStats.Data.Entities;
@@ -10,6 +11,9 @@ public class MatchIngestionService(
     LiveMatchState liveMatch,
     ILogger<MatchIngestionService> logger)
 {
+    private const int InterRoundWindowSeconds = 11;
+    private readonly ConcurrentDictionary<string, int> _roundEndTimes = new();
+
     public Task HandleAsync(QlEvent @event, int serverId) => @event switch
     {
         MatchStartedData e  => HandleMatchStartedAsync(e, serverId),
@@ -38,6 +42,9 @@ public class MatchIngestionService(
             db.Matches.Add(match);
             await db.SaveChangesAsync();
         }
+
+        // Reset round-end tracking for this new match
+        _roundEndTimes.TryRemove(matchGuid, out _);
 
         var livePlayers = data.Players?.Select(p =>
             (p.SteamId, p.Name, p.Team == 1 ? "RED" : p.Team == 2 ? "BLUE" : ""));
@@ -93,14 +100,7 @@ public class MatchIngestionService(
         }
 
         var player = await EnsurePlayerAsync(db, data.SteamId, data.Name);
-        var mp = await db.MatchPlayers
-            .FirstOrDefaultAsync(x => x.MatchId == match.Id && x.PlayerId == player.Id);
-
-        if (mp is null)
-        {
-            mp = new MatchPlayer { MatchId = match.Id, PlayerId = player.Id };
-            db.MatchPlayers.Add(mp);
-        }
+        var mp = await EnsureMatchPlayerAsync(db, match.Id, player.Id);
 
         mp.Apply(data);
 
@@ -116,21 +116,57 @@ public class MatchIngestionService(
 
     private async Task HandlePlayerKillAsync(PlayerKillData data)
     {
+        var matchGuid = data.MatchGuid.ToString();
+
         if (liveMatch.Current is null && data.MatchGuid != Guid.Empty)
-            liveMatch.StartMatch(data.MatchGuid.ToString(), "", "", "");
+            liveMatch.StartMatch(matchGuid, "", "", "");
 
         liveMatch.RecordKill(
             data.Killer?.SteamId ?? "", data.Killer?.Name ?? "",
             data.Victim?.SteamId ?? "", data.Victim?.Name ?? "",
             data.Mod);
 
-        await Task.CompletedTask;
+        // Filter inter-round suicides: a suicide within the window after ROUND_OVER is discarded
+        if (data.Suicide
+            && _roundEndTimes.TryGetValue(matchGuid, out var roundEndTime)
+            && data.Time - roundEndTime < InterRoundWindowSeconds)
+        {
+            return;
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var match = await db.Matches.FirstOrDefaultAsync(m => m.MatchGuid == matchGuid);
+        if (match is null) return;
+
+        if (!data.Suicide && !data.TeamKill
+            && data.Killer?.SteamId is { Length: > 0 } killerSteamId)
+        {
+            var killer = await EnsurePlayerAsync(db, killerSteamId, data.Killer!.Name);
+            var kmp = await EnsureMatchPlayerAsync(db, match.Id, killer.Id);
+            kmp.Kills++;
+        }
+
+        if (data.Victim?.SteamId is { Length: > 0 } victimSteamId)
+        {
+            var victim = await EnsurePlayerAsync(db, victimSteamId, data.Victim!.Name);
+            var vmp = await EnsureMatchPlayerAsync(db, match.Id, victim.Id);
+            if (data.Suicide)
+                vmp.Suicides++;
+            else
+                vmp.Deaths++;
+        }
+
+        await db.SaveChangesAsync();
     }
 
     private async Task HandleRoundOverAsync(RoundOverData data)
     {
-        await using var db = await dbFactory.CreateDbContextAsync();
         var matchGuid = data.MatchGuid.ToString();
+
+        // Record the round end time so inter-round suicides can be filtered
+        _roundEndTimes[matchGuid] = data.Time;
+
+        await using var db = await dbFactory.CreateDbContextAsync();
         var match = await db.Matches.FirstOrDefaultAsync(m => m.MatchGuid == matchGuid);
         if (match is not null)
         {
@@ -160,14 +196,7 @@ public class MatchIngestionService(
         if (match is null) return;
 
         var player = await EnsurePlayerAsync(db, data.SteamId, data.Name);
-        var mp = await db.MatchPlayers
-            .FirstOrDefaultAsync(x => x.MatchId == match.Id && x.PlayerId == player.Id);
-
-        if (mp is null)
-        {
-            mp = new MatchPlayer { MatchId = match.Id, PlayerId = player.Id };
-            db.MatchPlayers.Add(mp);
-        }
+        var mp = await EnsureMatchPlayerAsync(db, match.Id, player.Id);
 
         mp.Medals[data.Medal] = data.Total;
         await db.SaveChangesAsync();
@@ -214,5 +243,16 @@ public class MatchIngestionService(
                 player.DisplayName = name;
         }
         return player;
+    }
+
+    private static async Task<MatchPlayer> EnsureMatchPlayerAsync(AppDbContext db, int matchId, int playerId)
+    {
+        var mp = await db.MatchPlayers
+            .FirstOrDefaultAsync(x => x.MatchId == matchId && x.PlayerId == playerId);
+        if (mp is not null) return mp;
+
+        mp = new MatchPlayer { MatchId = matchId, PlayerId = playerId };
+        db.MatchPlayers.Add(mp);
+        return mp;
     }
 }
