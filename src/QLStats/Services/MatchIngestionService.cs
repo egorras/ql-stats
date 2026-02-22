@@ -32,12 +32,11 @@ public class MatchIngestionService(
 
         await using var db = await dbFactory.CreateDbContextAsync();
 
-        var session = await EnsureSessionAsync(db);
         var matchGuid = data.MatchGuid.ToString();
 
         if (!await db.Matches.AnyAsync(m => m.MatchGuid == matchGuid))
         {
-            var match = new Match { GameSessionId = session.Id, QLServerId = serverId };
+            var match = new Match { QLServerId = serverId };
             match.Apply(data);
             db.Matches.Add(match);
             await db.SaveChangesAsync();
@@ -63,8 +62,7 @@ public class MatchIngestionService(
         if (match is null)
         {
             logger.LogWarning("Match {MatchGuid} not found for report; creating it", matchGuid);
-            var session = await EnsureSessionAsync(db);
-            match = new Match { GameSessionId = session.Id, QLServerId = serverId };
+            match = new Match { QLServerId = serverId };
             db.Matches.Add(match);
         }
 
@@ -207,18 +205,6 @@ public class MatchIngestionService(
         await using var db = await dbFactory.CreateDbContextAsync();
         await EnsurePlayerAsync(db, data.SteamId, data.Name);
         await db.SaveChangesAsync();
-    }
-
-    private static async Task<GameSession> EnsureSessionAsync(AppDbContext db)
-    {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var session = await db.GameSessions.FirstOrDefaultAsync(s => s.SessionDate == today);
-        if (session is not null) return session;
-
-        session = new GameSession { SessionDate = today };
-        db.GameSessions.Add(session);
-        await db.SaveChangesAsync();
-        return session;
     }
 
     private static async Task<Player> EnsurePlayerAsync(AppDbContext db, string steamId, string name)

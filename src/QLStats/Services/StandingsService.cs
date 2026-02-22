@@ -29,12 +29,17 @@ public class StandingsService(AppDbContext db)
             .FirstOrDefaultAsync(s => s.Id == seasonId)
             ?? throw new InvalidOperationException($"Season {seasonId} not found");
 
-        // Load all match players for sessions in this season
+        var startDt = season.StartDate.ToDateTime(TimeOnly.MinValue);
+        var endDt = season.EndDate.HasValue
+            ? season.EndDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue)
+            : DateTime.MaxValue;
+
+        // Load all match players whose match falls within the season's date range
         var matchPlayers = await db.MatchPlayers
             .Include(mp => mp.Player)
             .Include(mp => mp.Match)
-                .ThenInclude(m => m.GameSession)
-            .Where(mp => mp.Match.GameSession.SeasonId == seasonId && mp.Match.FinishedAt != null)
+            .Where(mp => mp.Match.StartedAt >= startDt && mp.Match.StartedAt < endDt
+                         && mp.Match.FinishedAt != null)
             .ToListAsync();
 
         var grouped = matchPlayers

@@ -72,12 +72,22 @@ public class QlStatsMcpTools(AppDbContext db, StandingsService standings)
         [Description("Optional season Id to filter by")] int? seasonId = null)
     {
         var query = db.MatchPlayers
-            .Include(mp => mp.Match).ThenInclude(m => m.GameSession)
+            .Include(mp => mp.Match)
             .Include(mp => mp.Player)
             .Where(mp => mp.PlayerId == playerId && mp.Match.FinishedAt != null);
 
         if (seasonId.HasValue)
-            query = query.Where(mp => mp.Match.GameSession.SeasonId == seasonId);
+        {
+            var season = await db.Seasons.FindAsync(seasonId.Value);
+            if (season is not null)
+            {
+                var startDt = season.StartDate.ToDateTime(TimeOnly.MinValue);
+                var endDt = season.EndDate.HasValue
+                    ? season.EndDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue)
+                    : DateTime.MaxValue;
+                query = query.Where(mp => mp.Match.StartedAt >= startDt && mp.Match.StartedAt < endDt);
+            }
+        }
 
         var rows = await query.ToListAsync();
         if (rows.Count == 0)
@@ -169,7 +179,6 @@ public class QlStatsMcpTools(AppDbContext db, StandingsService standings)
     {
         var query = db.Matches
             .Include(m => m.MatchPlayers).ThenInclude(mp => mp.Player)
-            .Include(m => m.GameSession)
             .Where(m => m.FinishedAt != null)
             .AsQueryable();
 
@@ -186,7 +195,17 @@ public class QlStatsMcpTools(AppDbContext db, StandingsService standings)
             query = query.Where(m => DateOnly.FromDateTime(m.StartedAt) <= to);
 
         if (seasonId.HasValue)
-            query = query.Where(m => m.GameSession.SeasonId == seasonId);
+        {
+            var season = await db.Seasons.FindAsync(seasonId.Value);
+            if (season is not null)
+            {
+                var startDt = season.StartDate.ToDateTime(TimeOnly.MinValue);
+                var endDt = season.EndDate.HasValue
+                    ? season.EndDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue)
+                    : DateTime.MaxValue;
+                query = query.Where(m => m.StartedAt >= startDt && m.StartedAt < endDt);
+            }
+        }
 
         var matches = await query
             .OrderByDescending(m => m.StartedAt)

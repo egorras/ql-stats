@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using QLStats.Data.Entities;
 
@@ -8,7 +9,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Player> Players => Set<Player>();
     public DbSet<QLServer> QLServers => Set<QLServer>();
     public DbSet<Season> Seasons => Set<Season>();
-    public DbSet<GameSession> GameSessions => Set<GameSession>();
     public DbSet<Match> Matches => Set<Match>();
     public DbSet<MatchPlayer> MatchPlayers => Set<MatchPlayer>();
     public DbSet<RoundResult> RoundResults => Set<RoundResult>();
@@ -36,15 +36,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(s => s.Name).HasMaxLength(128);
         });
 
-        modelBuilder.Entity<GameSession>(e =>
-        {
-            e.HasIndex(g => g.SessionDate);
-            e.HasOne(g => g.Season)
-                .WithMany(s => s.GameSessions)
-                .HasForeignKey(g => g.SeasonId)
-                .OnDelete(DeleteBehavior.SetNull);
-        });
-
         modelBuilder.Entity<Match>(e =>
         {
             e.HasIndex(m => m.MatchGuid).IsUnique();
@@ -53,10 +44,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(m => m.GameType).HasMaxLength(32);
             e.Property(m => m.ServerTitle).HasMaxLength(128);
             e.HasIndex(m => m.StartedAt);
-            e.HasOne(m => m.GameSession)
-                .WithMany(s => s.Matches)
-                .HasForeignKey(m => m.GameSessionId)
-                .OnDelete(DeleteBehavior.Cascade);
             e.HasOne(m => m.QLServer)
                 .WithMany(s => s.Matches)
                 .HasForeignKey(m => m.QLServerId)
@@ -67,7 +54,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.HasIndex(mp => new { mp.MatchId, mp.PlayerId }).IsUnique();
             e.Property(mp => mp.Team).HasMaxLength(8);
-            e.Property(mp => mp.Medals).HasColumnType("jsonb");
+            e.Property(mp => mp.Medals)
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => JsonSerializer.Deserialize<Dictionary<string, int>>(v, (JsonSerializerOptions?)null) ?? new())
+                .HasColumnType("jsonb");
             e.HasOne(mp => mp.Match)
                 .WithMany(m => m.MatchPlayers)
                 .HasForeignKey(mp => mp.MatchId)

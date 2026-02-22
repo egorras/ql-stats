@@ -8,7 +8,6 @@ public class Match :
     ICanApplyEvent<MatchReportData>
 {
     public int Id { get; set; }
-    public int GameSessionId { get; set; }
     public int QLServerId { get; set; }
     public string MatchGuid { get; set; } = "";
     public string Map { get; set; } = "";
@@ -19,7 +18,6 @@ public class Match :
     public int? TeamRedRounds { get; set; }
     public int? TeamBlueRounds { get; set; }
 
-    public GameSession GameSession { get; set; } = null!;
     public QLServer QLServer { get; set; } = null!;
     public ICollection<MatchPlayer> MatchPlayers { get; set; } = [];
     public ICollection<RoundResult> RoundResults { get; set; } = [];

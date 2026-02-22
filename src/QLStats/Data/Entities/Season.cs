@@ -8,6 +8,5 @@ public class Season
     public DateOnly? EndDate { get; set; }
     public bool IsActive { get; set; }
 
-    public ICollection<GameSession> GameSessions { get; set; } = [];
     public ICollection<ScoringRule> Rules { get; set; } = [];
 }

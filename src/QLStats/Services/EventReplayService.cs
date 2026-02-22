@@ -40,7 +40,6 @@ public class EventReplayService(
         await db.RoundResults.ExecuteDeleteAsync();
         await db.MatchPlayers.ExecuteDeleteAsync();
         await db.Matches.ExecuteDeleteAsync();
-        await db.GameSessions.ExecuteDeleteAsync();
 
         var query = db.ZmqEvents
             .OrderBy(e => e.ReceivedAt)
