@@ -1,0 +1,262 @@
+@page "/seasons/new"
+@page "/seasons/{Id:int}/edit"
+@using QLStats.Data
+@using QLStats.Data.Entities
+@inject AppDbContext Db
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(Id == 0 ? "New Season" : "Edit Season") — QL Stats</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="mt-4 pb-10">
+    <div class="d-flex align-center mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/seasons"))" Class="mr-2" />
+        <MudText Typo="Typo.h4">@(Id == 0 ? "New Season" : "Edit Season")</MudText>
+    </div>
+
+    @if (_loading)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    }
+    else
+    {
+        <MudForm @ref="_form" @bind-IsValid="_isValid">
+            <MudPaper Class="pa-4 mb-4">
+                <MudGrid>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField Label="Name" @bind-Value="_season.Name" Required="true" RequiredError="Name is required" />
+                    </MudItem>
+                    <MudItem xs="12" sm="3">
+                        <MudDatePicker Label="Start Date" @bind-Date="_startDate" Required="true" RequiredError="Start date is required" />
+                    </MudItem>
+                    <MudItem xs="12" sm="3">
+                        <MudDatePicker Label="End Date (optional)" @bind-Date="_endDate" Clearable="true" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudSwitch T="bool" @bind-Value="_season.IsActive" Label="Active" Color="Color.Success" />
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+
+            <div class="d-flex align-center justify-space-between mb-4">
+                <MudText Typo="Typo.h6">Scoring Rules</MudText>
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="AddRule">Add Rule</MudButton>
+            </div>
+
+            <MudDropContainer @ref="_dropContainer" T="ScoringRule" Items="_rules" ItemsSelector="@((item,dropzone) => dropzone == "Rules")" ItemDropped="ItemDropped" Class="d-flex flex-column flex-grow-1">
+                <ChildContent>
+                    <MudDropZone T="ScoringRule" Identifier="Rules" Class="flex-grow-1" AllowReorder="true" />
+                </ChildContent>
+                <ItemRenderer Context="rule">
+                    <MudPaper Class="pa-3 mb-2 d-flex align-center" Outlined="true">
+                        <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Class="mr-3" Style="cursor: grab" />
+                        <div class="flex-grow-1">
+                            <MudGrid Spacing="1">
+                                <MudItem xs="12" sm="4">
+                                    <MudSelect T="ScoringRuleType" Label="Rule Type" @bind-Value="rule.Type" Margin="Margin.Dense" Dense="true">
+                                        @foreach (var val in Enum.GetValues<ScoringRuleType>())
+                                        {
+                                            <MudSelectItem Value="@val">@GetRuleLabel(val)</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="4" sm="2">
+                                    <MudNumericField Label="Value" @bind-Value="rule.Value" Margin="Margin.Dense" Format="0.####" />
+                                </MudItem>
+                                <MudItem xs="4" sm="2">
+                                    <MudNumericField Label="Threshold" @bind-Value="rule.Threshold" Margin="Margin.Dense"
+                                                     Disabled="@(!IsThresholdRule(rule.Type))" />
+                                </MudItem>
+                                <MudItem xs="3" sm="3">
+                                    @if (IsMedalRule(rule.Type))
+                                    {
+                                        <MudTextField Label="Medal Type" @bind-Value="rule.MedalType" Placeholder="e.g. Excellent" Margin="Margin.Dense" />
+                                    }
+                                    else
+                                    {
+                                        <MudTextField Label="Filter (GT)" @bind-Value="rule.GameTypeFilter" Placeholder="e.g. CA" Margin="Margin.Dense" />
+                                    }
+                                </MudItem>
+                                <MudItem xs="1" Class="d-flex align-center justify-end">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => RemoveRule(rule))" />
+                                </MudItem>
+                            </MudGrid>
+                        </div>
+                    </MudPaper>
+                </ItemRenderer>
+            </MudDropContainer>
+
+            <div class="d-flex justify-end mt-6">
+                <MudButton OnClick="@(() => Nav.NavigateTo("/seasons"))" Class="mr-2">Cancel</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync">Save Season</MudButton>
+            </div>
+        </MudForm>
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Season _season = new();
+    private List<ScoringRule> _rules = new();
+    private bool _loading = true;
+    private DateTime? _startDate;
+    private DateTime? _endDate;
+    private MudForm? _form;
+    private bool _isValid;
+    private MudDropContainer<ScoringRule>? _dropContainer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Id != 0)
+        {
+            var s = await Db.Seasons.Include(s => s.Rules).FirstOrDefaultAsync(s => s.Id == Id);
+            if (s == null)
+            {
+                Snackbar.Add("Season not found.", Severity.Error);
+                Nav.NavigateTo("/seasons");
+                return;
+            }
+            _season = s;
+            _rules = s.Rules.OrderBy(r => r.SortOrder).ToList();
+            _startDate = s.StartDate.ToDateTime(TimeOnly.MinValue);
+            _endDate = s.EndDate?.ToDateTime(TimeOnly.MinValue);
+        }
+        else
+        {
+            var lastSeason = await Db.Seasons.Include(s => s.Rules).OrderByDescending(s => s.StartDate).FirstOrDefaultAsync();
+            _season = new Season { StartDate = DateOnly.FromDateTime(DateTime.Today), IsActive = true };
+            _startDate = DateTime.Today;
+
+            if (lastSeason != null)
+            {
+                _rules = lastSeason.Rules.OrderBy(r => r.SortOrder).Select(r => new ScoringRule
+                {
+                    Type = r.Type,
+                    Value = r.Value,
+                    Threshold = r.Threshold,
+                    GameTypeFilter = r.GameTypeFilter,
+                    MedalType = r.MedalType,
+                    SortOrder = r.SortOrder
+                }).ToList();
+            }
+            else
+            {
+                _rules = new List<ScoringRule>
+                {
+                    new() { Type = ScoringRuleType.KillsMultiplier, Value = 1, SortOrder = 0 },
+                    new() { Type = ScoringRuleType.DeathsMultiplier, Value = -0.5m, SortOrder = 1 },
+                    new() { Type = ScoringRuleType.WinsBonus, Value = 5, SortOrder = 2 },
+                    new() { Type = ScoringRuleType.RoundsWonMultiplier, Value = 0.5m, SortOrder = 3 },
+                    new() { Type = ScoringRuleType.DamageMultiplier, Value = 0.01m, SortOrder = 4 }
+                };
+            }
+        }
+        _loading = false;
+    }
+
+    private void AddRule()
+    {
+        var nextOrder = _rules.Count > 0 ? _rules.Max(r => r.SortOrder) + 1 : 0;
+        _rules.Add(new ScoringRule { Type = ScoringRuleType.KillsMultiplier, Value = 1, SortOrder = nextOrder });
+        _dropContainer?.Refresh();
+    }
+
+    private void RemoveRule(ScoringRule rule)
+    {
+        _rules.Remove(rule);
+        ReorderRules();
+        _dropContainer?.Refresh();
+    }
+
+    private void ItemDropped(MudItemDropInfo<ScoringRule> dropInfo)
+    {
+        if (dropInfo.Item == null) return;
+        
+        _rules.Remove(dropInfo.Item);
+        var index = dropInfo.IndexInZone;
+        if (index < 0) index = 0;
+        if (index >= _rules.Count) _rules.Add(dropInfo.Item);
+        else _rules.Insert(index, dropInfo.Item);
+        
+        ReorderRules();
+        _dropContainer?.Refresh();
+    }
+
+    private void ReorderRules()
+    {
+        for (int i = 0; i < _rules.Count; i++)
+        {
+            _rules[i].SortOrder = i;
+        }
+    }
+
+    private string GetRuleLabel(ScoringRuleType type) => type switch
+    {
+        ScoringRuleType.KillsMultiplier => "Kills Multiplier",
+        ScoringRuleType.DeathsMultiplier => "Deaths Multiplier",
+        ScoringRuleType.DamageMultiplier => "Damage Multiplier",
+        ScoringRuleType.WinsBonus => "Win Bonus",
+        ScoringRuleType.LossesBonus => "Loss Bonus",
+        ScoringRuleType.RoundsWonMultiplier => "Rounds Won Multiplier",
+        ScoringRuleType.RoundsLostMultiplier => "Rounds Lost Multiplier",
+        ScoringRuleType.DamageThresholdBonus => "Damage Threshold Bonus",
+        ScoringRuleType.KillsThresholdBonus => "Kills Threshold Bonus",
+        ScoringRuleType.MedalMultiplier => "Medal Multiplier",
+        _ => type.ToString()
+    };
+
+    private bool IsThresholdRule(ScoringRuleType type) =>
+        type == ScoringRuleType.DamageThresholdBonus || type == ScoringRuleType.KillsThresholdBonus;
+
+    private bool IsMedalRule(ScoringRuleType type) => type == ScoringRuleType.MedalMultiplier;
+
+    private async Task SaveAsync()
+    {
+        if (_form is not null)
+        {
+            await _form.Validate();
+            if (!_isValid) return;
+        }
+
+        _season.StartDate = _startDate.HasValue ? DateOnly.FromDateTime(_startDate.Value) : DateOnly.FromDateTime(DateTime.Today);
+        _season.EndDate = _endDate.HasValue ? DateOnly.FromDateTime(_endDate.Value) : null;
+
+        ReorderRules();
+
+        if (Id == 0)
+        {
+            _season.Rules = _rules;
+            Db.Seasons.Add(_season);
+        }
+        else
+        {
+            var existing = await Db.Seasons.Include(s => s.Rules).FirstOrDefaultAsync(s => s.Id == Id);
+            if (existing != null)
+            {
+                existing.Name = _season.Name;
+                existing.StartDate = _season.StartDate;
+                existing.EndDate = _season.EndDate;
+                existing.IsActive = _season.IsActive;
+
+                existing.Rules.Clear();
+                foreach (var r in _rules)
+                {
+                    existing.Rules.Add(new ScoringRule
+                    {
+                        Type = r.Type,
+                        Value = r.Value,
+                        Threshold = r.Threshold,
+                        GameTypeFilter = r.GameTypeFilter,
+                        MedalType = r.MedalType,
+                        SortOrder = r.SortOrder
+                    });
+                }
+            }
+        }
+
+        await Db.SaveChangesAsync();
+        Snackbar.Add("Season saved.", Severity.Success);
+        Nav.NavigateTo("/seasons");
+    }
+}

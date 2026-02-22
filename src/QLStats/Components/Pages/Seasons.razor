@@ -3,13 +3,14 @@
 @using QLStats.Data.Entities
 @inject AppDbContext Db
 @inject ISnackbar Snackbar
+@inject NavigationManager Nav
 
 <PageTitle>Seasons — QL Stats</PageTitle>
 
 <MudText Typo="Typo.h4" Class="mb-4">Seasons</MudText>
 
 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
-    OnClick="OpenAddDialog" Class="mb-4">New Season</MudButton>
+    OnClick="@(() => Nav.NavigateTo("/seasons/new"))" Class="mb-4">New Season</MudButton>
 
 <MudTable Items="_seasons" Dense="true" Hover="true" Loading="_loading">
     <HeaderContent>
@@ -33,84 +34,14 @@
         </MudTd>
         <MudTd>
             <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                OnClick="@(() => OpenEditDialog(context))" />
+                OnClick="@(() => Nav.NavigateTo($"/seasons/{context.Id}/edit"))" />
         </MudTd>
     </RowTemplate>
 </MudTable>
 
-<MudDialog @bind-Visible="_dialogOpen">
-    <TitleContent>
-        <MudText Typo="Typo.h6">@(_editSeason.Id == 0 ? "New Season" : "Edit Season")</MudText>
-    </TitleContent>
-    <DialogContent>
-        <MudForm @ref="_form" @bind-IsValid="_isValid">
-            <MudTextField Label="Name" @bind-Value="_editSeason.Name" Required="true" RequiredError="Name is required" Class="mb-3" />
-            <MudDatePicker Label="Start Date" @bind-Date="_startDate" Required="true" RequiredError="Start date is required" Class="mb-3" />
-            <MudDatePicker Label="End Date (optional)" @bind-Date="_endDate" Class="mb-3" />
-            <MudSwitch T="bool" @bind-Value="_editSeason.IsActive" Label="Active" Color="Color.Success" Class="mb-3" />
-
-            <MudDivider Class="my-4" />
-            <div class="d-flex align-center justify-space-between mb-2">
-                <MudText Typo="Typo.h6">Scoring Rules</MudText>
-                <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="AddRule">Add Rule</MudButton>
-            </div>
-
-            @foreach (var rule in _editSeason.Rules.OrderBy(r => r.SortOrder))
-            {
-                <MudPaper Class="pa-2 mb-2" Outlined="true">
-                    <MudGrid Spacing="1">
-                        <MudItem xs="8">
-                            <MudSelect T="ScoringRuleType" Label="Rule Type" @bind-Value="rule.Type" Margin="Margin.Dense">
-                                @foreach (var val in Enum.GetValues<ScoringRuleType>())
-                                {
-                                    <MudSelectItem Value="@val">@GetRuleLabel(val)</MudSelectItem>
-                                }
-                            </MudSelect>
-                        </MudItem>
-                        <MudItem xs="4" Class="d-flex align-center justify-end">
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => _editSeason.Rules.Remove(rule))" />
-                        </MudItem>
-                        
-                        <MudItem xs="3">
-                            <MudNumericField Label="Value" @bind-Value="rule.Value" Margin="Margin.Dense" Format="0.####" />
-                        </MudItem>
-                        <MudItem xs="3">
-                            <MudNumericField Label="Threshold" @bind-Value="rule.Threshold" Margin="Margin.Dense"
-                                Disabled="@(!IsThresholdRule(rule.Type))" />
-                        </MudItem>
-                        <MudItem xs="3">
-                            @if (IsMedalRule(rule.Type))
-                            {
-                                <MudTextField Label="Medal Type" @bind-Value="rule.MedalType" Placeholder="e.g. Excellent" Margin="Margin.Dense" />
-                            }
-                            else
-                            {
-                                <MudTextField Label="Filter (GT)" @bind-Value="rule.GameTypeFilter" Placeholder="e.g. CA" Margin="Margin.Dense" />
-                            }
-                        </MudItem>
-                        <MudItem xs="3">
-                            <MudNumericField Label="Order" @bind-Value="rule.SortOrder" Margin="Margin.Dense" />
-                        </MudItem>
-                    </MudGrid>
-                </MudPaper>
-            }
-        </MudForm>
-    </DialogContent>
-    <DialogActions>
-        <MudButton OnClick="@(() => _dialogOpen = false)">Cancel</MudButton>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveSeasonAsync">Save</MudButton>
-    </DialogActions>
-</MudDialog>
-
 @code {
     private List<Season> _seasons = [];
     private bool _loading = true;
-    private bool _dialogOpen;
-    private Season _editSeason = new();
-    private DateTime? _startDate;
-    private DateTime? _endDate;
-    private MudForm? _form;
-    private bool _isValid;
 
     protected override async Task OnInitializedAsync()
     {
@@ -121,124 +52,5 @@
     {
         _seasons = await Db.Seasons.Include(s => s.Rules).OrderByDescending(s => s.IsActive).ThenByDescending(s => s.StartDate).ToListAsync();
         _loading = false;
-    }
-
-    private void OpenAddDialog()
-    {
-        var lastSeason = _seasons.OrderByDescending(s => s.StartDate).FirstOrDefault();
-        
-        _editSeason = new Season
-        {
-            StartDate = DateOnly.FromDateTime(DateTime.Today),
-            Rules = lastSeason?.Rules.OrderBy(r => r.SortOrder).Select(r => new ScoringRule
-            {
-                Type = r.Type,
-                Value = r.Value,
-                Threshold = r.Threshold,
-                GameTypeFilter = r.GameTypeFilter,
-                MedalType = r.MedalType,
-                SortOrder = r.SortOrder
-            }).ToList() ?? new List<ScoringRule>
-            {
-                new() { Type = ScoringRuleType.KillsMultiplier, Value = 1, SortOrder = 0 },
-                new() { Type = ScoringRuleType.DeathsMultiplier, Value = -0.5m, SortOrder = 1 },
-                new() { Type = ScoringRuleType.WinsBonus, Value = 5, SortOrder = 2 },
-                new() { Type = ScoringRuleType.RoundsWonMultiplier, Value = 0.5m, SortOrder = 3 },
-                new() { Type = ScoringRuleType.DamageMultiplier, Value = 0.01m, SortOrder = 4 }
-            }
-        };
-        _startDate = _editSeason.StartDate.ToDateTime(TimeOnly.MinValue);
-        _endDate = null;
-        _dialogOpen = true;
-    }
-
-    private void OpenEditDialog(Season s)
-    {
-        _editSeason = new Season
-        {
-            Id = s.Id, Name = s.Name, StartDate = s.StartDate, EndDate = s.EndDate,
-            IsActive = s.IsActive,
-            Rules = s.Rules.OrderBy(r => r.SortOrder).Select(r => new ScoringRule
-            {
-                Id = r.Id, Type = r.Type,
-                Value = r.Value, Threshold = r.Threshold,
-                GameTypeFilter = r.GameTypeFilter, MedalType = r.MedalType,
-                SortOrder = r.SortOrder
-            }).ToList()
-        };
-        _startDate = s.StartDate.ToDateTime(TimeOnly.MinValue);
-        _endDate = s.EndDate?.ToDateTime(TimeOnly.MinValue);
-        _dialogOpen = true;
-    }
-
-    private void AddRule()
-    {
-        var nextOrder = _editSeason.Rules.Count > 0 ? _editSeason.Rules.Max(r => r.SortOrder) + 1 : 0;
-        _editSeason.Rules.Add(new ScoringRule { Type = ScoringRuleType.KillsMultiplier, Value = 1, SortOrder = nextOrder });
-    }
-
-    private string GetRuleLabel(ScoringRuleType type) => type switch
-    {
-        ScoringRuleType.KillsMultiplier => "Kills Multiplier",
-        ScoringRuleType.DeathsMultiplier => "Deaths Multiplier",
-        ScoringRuleType.DamageMultiplier => "Damage Multiplier",
-        ScoringRuleType.WinsBonus => "Win Bonus",
-        ScoringRuleType.LossesBonus => "Loss Bonus",
-        ScoringRuleType.RoundsWonMultiplier => "Rounds Won Multiplier",
-        ScoringRuleType.RoundsLostMultiplier => "Rounds Lost Multiplier",
-        ScoringRuleType.DamageThresholdBonus => "Damage Threshold Bonus",
-        ScoringRuleType.KillsThresholdBonus => "Kills Threshold Bonus",
-        ScoringRuleType.MedalMultiplier => "Medal Multiplier",
-        _ => type.ToString()
-    };
-
-    private bool IsThresholdRule(ScoringRuleType type) =>
-        type == ScoringRuleType.DamageThresholdBonus || type == ScoringRuleType.KillsThresholdBonus;
-
-    private bool IsMedalRule(ScoringRuleType type) => type == ScoringRuleType.MedalMultiplier;
-
-    private async Task SaveSeasonAsync()
-    {
-        if (_form is not null)
-        {
-            await _form.Validate();
-            if (!_isValid) return;
-        }
-
-        _editSeason.StartDate = _startDate.HasValue ? DateOnly.FromDateTime(_startDate.Value) : DateOnly.FromDateTime(DateTime.Today);
-        _editSeason.EndDate = _endDate.HasValue ? DateOnly.FromDateTime(_endDate.Value) : null;
-
-        if (_editSeason.Id == 0)
-        {
-            Db.Seasons.Add(_editSeason);
-        }
-        else
-        {
-            var existing = await Db.Seasons.Include(s => s.Rules).FirstOrDefaultAsync(s => s.Id == _editSeason.Id);
-            if (existing is not null)
-            {
-                existing.Name = _editSeason.Name;
-                existing.StartDate = _editSeason.StartDate;
-                existing.EndDate = _editSeason.EndDate;
-                existing.IsActive = _editSeason.IsActive;
-
-                // Sync rules
-                existing.Rules.Clear();
-                foreach (var r in _editSeason.Rules)
-                {
-                    existing.Rules.Add(new ScoringRule
-                    {
-                        Type = r.Type,
-                        Value = r.Value, Threshold = r.Threshold,
-                        GameTypeFilter = r.GameTypeFilter, MedalType = r.MedalType,
-                        SortOrder = r.SortOrder
-                    });
-                }
-            }
-        }
-        await Db.SaveChangesAsync();
-        await LoadAsync();
-        _dialogOpen = false;
-        Snackbar.Add("Season saved.", Severity.Success);
     }
 }

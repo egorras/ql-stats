@@ -4,6 +4,7 @@
 @using QLStats.Services
 @inject AppDbContext Db
 @inject StandingsService StandingsService
+@inject NavigationManager Nav
 
 <PageTitle>Season — QL Stats</PageTitle>
 
@@ -13,10 +14,16 @@
 }
 else
 {
-    <MudText Typo="Typo.h4" Class="mb-1">@_season.Name</MudText>
-    <MudText Color="Color.Secondary" Class="mb-4">
-        @_season.StartDate — @(_season.EndDate?.ToString() ?? "ongoing")
-    </MudText>
+    <div class="d-flex align-center justify-space-between mb-2">
+        <div>
+            <MudText Typo="Typo.h4" Class="mb-1">@_season.Name</MudText>
+            <MudText Color="Color.Secondary" Class="mb-4">
+                @_season.StartDate — @(_season.EndDate?.ToString() ?? "ongoing")
+            </MudText>
+        </div>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" 
+                   OnClick="@(() => Nav.NavigateTo($"/seasons/{SeasonId}/edit"))">Edit Season</MudButton>
+    </div>
 
     <MudText Typo="Typo.h6" Class="mb-2">Scoring Rules</MudText>
     <MudPaper Class="pa-3 mb-4" Elevation="0" Outlined="true">
