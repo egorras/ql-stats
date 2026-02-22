@@ -8,90 +8,119 @@
 
 <PageTitle>@(Id == 0 ? "New Season" : "Edit Season") — QL Stats</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.Medium" Class="mt-4 pb-10">
-    <div class="d-flex align-center mb-4">
-        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/seasons"))" Class="mr-2" />
-        <MudText Typo="Typo.h4">@(Id == 0 ? "New Season" : "Edit Season")</MudText>
-    </div>
+<MudContainer MaxWidth="MaxWidth.Medium" Class="mt-6 pb-12">
+    <MudStack Spacing="4">
+        <!-- Header -->
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/seasons"))" Color="Color.Inherit" />
+            <MudText Typo="Typo.h4">@(Id == 0 ? "New Season" : "Edit Season")</MudText>
+        </MudStack>
 
-    @if (_loading)
-    {
-        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
-    }
-    else
-    {
-        <MudForm @ref="_form" @bind-IsValid="_isValid">
-            <MudPaper Class="pa-4 mb-4">
-                <MudGrid>
-                    <MudItem xs="12" sm="6">
-                        <MudTextField Label="Name" @bind-Value="_season.Name" Required="true" RequiredError="Name is required" />
-                    </MudItem>
-                    <MudItem xs="12" sm="3">
-                        <MudDatePicker Label="Start Date" @bind-Date="_startDate" Required="true" RequiredError="Start date is required" />
-                    </MudItem>
-                    <MudItem xs="12" sm="3">
-                        <MudDatePicker Label="End Date (optional)" @bind-Date="_endDate" Clearable="true" />
-                    </MudItem>
-                    <MudItem xs="12">
-                        <MudSwitch T="bool" @bind-Value="_season.IsActive" Label="Active" Color="Color.Success" />
-                    </MudItem>
-                </MudGrid>
-            </MudPaper>
-
-            <div class="d-flex align-center justify-space-between mb-4">
-                <MudText Typo="Typo.h6">Scoring Rules</MudText>
-                <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="AddRule">Add Rule</MudButton>
+        @if (_loading)
+        {
+            <div class="d-flex justify-center pa-12">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
             </div>
+        }
+        else
+        {
+            <MudForm @ref="_form" @bind-IsValid="_isValid">
+                <MudStack Spacing="6">
+                    
+                    <!-- Season Info Card -->
+                    <MudCard Elevation="2" Class="pa-4">
+                        <MudGrid Spacing="2">
+                            <MudItem xs="12" sm="6">
+                                <MudTextField Label="Season Name" @bind-Value="_season.Name" 
+                                              Required="true" RequiredError="Name is required" 
+                                              Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="6" sm="3">
+                                <MudDatePicker Label="Start Date" @bind-Date="_startDate" 
+                                               Required="true" RequiredError="Start date is required" 
+                                               Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="6" sm="3">
+                                <MudDatePicker Label="End Date" @bind-Date="_endDate" Clearable="true" 
+                                               Placeholder="Ongoing"
+                                               Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="12">
+                                <MudSwitch T="bool" @bind-Value="_season.IsActive" Label="Set as Active Season" Color="Color.Success" />
+                            </MudItem>
+                        </MudGrid>
+                    </MudCard>
 
-            <MudDropContainer @ref="_dropContainer" T="ScoringRule" Items="_rules" ItemsSelector="@((item,dropzone) => dropzone == "Rules")" ItemDropped="ItemDropped" Class="d-flex flex-column flex-grow-1">
-                <ChildContent>
-                    <MudDropZone T="ScoringRule" Identifier="Rules" Class="flex-grow-1" AllowReorder="true" />
-                </ChildContent>
-                <ItemRenderer Context="rule">
-                    <MudPaper Class="pa-3 mb-2 d-flex align-center" Outlined="true">
-                        <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Class="mr-3" Style="cursor: grab" />
-                        <div class="flex-grow-1">
-                            <MudGrid Spacing="1">
-                                <MudItem xs="12" sm="4">
-                                    <MudSelect T="ScoringRuleType" Label="Rule Type" @bind-Value="rule.Type" Margin="Margin.Dense" Dense="true">
-                                        @foreach (var val in Enum.GetValues<ScoringRuleType>())
-                                        {
-                                            <MudSelectItem Value="@val">@GetRuleLabel(val)</MudSelectItem>
-                                        }
-                                    </MudSelect>
-                                </MudItem>
-                                <MudItem xs="4" sm="2">
-                                    <MudNumericField Label="Value" @bind-Value="rule.Value" Margin="Margin.Dense" Format="0.####" />
-                                </MudItem>
-                                <MudItem xs="4" sm="2">
-                                    <MudNumericField Label="Threshold" @bind-Value="rule.Threshold" Margin="Margin.Dense"
-                                                     Disabled="@(!IsThresholdRule(rule.Type))" />
-                                </MudItem>
-                                <MudItem xs="3" sm="3">
-                                    @if (IsMedalRule(rule.Type))
-                                    {
-                                        <MudTextField Label="Medal Type" @bind-Value="rule.MedalType" Placeholder="e.g. Excellent" Margin="Margin.Dense" />
-                                    }
-                                    else
-                                    {
-                                        <MudTextField Label="Filter (GT)" @bind-Value="rule.GameTypeFilter" Placeholder="e.g. CA" Margin="Margin.Dense" />
-                                    }
-                                </MudItem>
-                                <MudItem xs="1" Class="d-flex align-center justify-end">
-                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => RemoveRule(rule))" />
-                                </MudItem>
-                            </MudGrid>
-                        </div>
-                    </MudPaper>
-                </ItemRenderer>
-            </MudDropContainer>
+                    <!-- Rules Header -->
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <MudText Typo="Typo.h5">Scoring Rules</MudText>
+                        <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary" OnClick="AddRule">Add Rule</MudButton>
+                    </MudStack>
 
-            <div class="d-flex justify-end mt-6">
-                <MudButton OnClick="@(() => Nav.NavigateTo("/seasons"))" Class="mr-2">Cancel</MudButton>
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync">Save Season</MudButton>
-            </div>
-        </MudForm>
-    }
+                    <!-- Draggable Rules List -->
+                    <MudDropContainer @ref="_dropContainer" T="ScoringRule" Items="_rules" 
+                                      ItemsSelector="@((item,dropzone) => dropzone == "Rules")" 
+                                      ItemDropped="ItemDropped" Class="d-flex flex-column">
+                        <ChildContent>
+                            <MudDropZone T="ScoringRule" Identifier="Rules" Class="d-flex flex-column gap-3" AllowReorder="true" />
+                        </ChildContent>
+                        <ItemRenderer Context="rule">
+                            <MudPaper Elevation="0" Class="pa-3 border-solid border-1 mud-border-lines-default rounded" Style="background-color: var(--mud-palette-background-grey);">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Color="Color.Default" Style="cursor: grab; opacity: 0.5" />
+                                    
+                                    <MudGrid Spacing="1" Class="flex-grow-1">
+                                        <MudItem xs="12" sm="4">
+                                            <MudSelect T="ScoringRuleType" Label="Rule Type" @bind-Value="rule.Type" 
+                                                       Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                                                @foreach (var val in Enum.GetValues<ScoringRuleType>())
+                                                {
+                                                    <MudSelectItem Value="@val">@GetRuleLabel(val)</MudSelectItem>
+                                                }
+                                            </MudSelect>
+                                        </MudItem>
+                                        <MudItem xs="6" sm="2">
+                                            <MudNumericField Label="Points" @bind-Value="rule.Value" 
+                                                             Variant="Variant.Outlined" Margin="Margin.Dense" Format="0.####" />
+                                        </MudItem>
+                                        <MudItem xs="6" sm="2">
+                                            <MudNumericField Label="Threshold" @bind-Value="rule.Threshold" 
+                                                             Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                             Disabled="@(!IsThresholdRule(rule.Type))" />
+                                        </MudItem>
+                                        <MudItem xs="12" sm="4">
+                                            @if (IsMedalRule(rule.Type))
+                                            {
+                                                <MudTextField Label="Medal Type" @bind-Value="rule.MedalType" 
+                                                              Placeholder="e.g. Excellent" 
+                                                              Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                            }
+                                            else
+                                            {
+                                                <MudTextField Label="Game Type Filter" @bind-Value="rule.GameTypeFilter" 
+                                                              Placeholder="All types" 
+                                                              Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                            }
+                                        </MudItem>
+                                    </MudGrid>
+
+                                    <MudIconButton Icon="@Icons.Material.Filled.DeleteOutline" Color="Color.Error" OnClick="@(() => RemoveRule(rule))" />
+                                </MudStack>
+                            </MudPaper>
+                        </ItemRenderer>
+                    </MudDropContainer>
+
+                    <MudDivider />
+
+                    <!-- Actions -->
+                    <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                        <MudButton OnClick="@(() => Nav.NavigateTo("/seasons"))" Variant="Variant.Text">Cancel</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync" Size="Size.Large">Save Season</MudButton>
+                    </MudStack>
+                </MudStack>
+            </MudForm>
+        }
+    </MudStack>
 </MudContainer>
 
 @code {

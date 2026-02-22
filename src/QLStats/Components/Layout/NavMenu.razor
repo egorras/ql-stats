@@ -1,14 +1,46 @@
-<MudNavMenu>
-    <MudNavLink Href="" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
-    <MudNavLink Href="live" Icon="@Icons.Material.Filled.LiveTv">Live Match</MudNavLink>
-    <MudDivider Class="my-2" />
-    <MudNavLink Href="matches" Icon="@Icons.Material.Filled.History">Match History</MudNavLink>
-    <MudNavLink Href="sessions" Icon="@Icons.Material.Filled.CalendarToday">Sessions</MudNavLink>
-    <MudNavLink Href="seasons" Icon="@Icons.Material.Filled.EmojiEvents">Seasons</MudNavLink>
-    <MudDivider Class="my-2" />
-    <MudNavLink Href="players" Icon="@Icons.Material.Filled.People">Players</MudNavLink>
-    <MudNavLink Href="servers" Icon="@Icons.Material.Filled.Dns">Servers</MudNavLink>
-    <MudDivider Class="my-2" />
-    <MudNavLink Href="admin/replay" Icon="@Icons.Material.Filled.Replay">Replay Events</MudNavLink>
-    <MudNavLink Href="admin/events" Icon="@Icons.Material.Filled.List">ZMQ Events</MudNavLink>
+<MudNavMenu Class="mud-nav-menu-modern">
+    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Rounded.Dashboard" IconColor="Color.Primary">Dashboard</MudNavLink>
+    <MudNavLink Href="live" Icon="@Icons.Material.Rounded.LiveTv" IconColor="Color.Secondary">Live Match</MudNavLink>
+    
+    <MudNavGroup Title="HISTORY" Expanded="true" Icon="@Icons.Material.Rounded.History" IconColor="Color.Info">
+        <MudNavLink Href="matches" Icon="@Icons.Material.Rounded.SportsEsports">Match History</MudNavLink>
+        <MudNavLink Href="sessions" Icon="@Icons.Material.Rounded.Today">Sessions</MudNavLink>
+        <MudNavLink Href="seasons" Icon="@Icons.Material.Rounded.EmojiEvents">Seasons</MudNavLink>
+    </MudNavGroup>
+
+    <MudNavGroup Title="STATS" Expanded="true" Icon="@Icons.Material.Rounded.BarChart" IconColor="Color.Success">
+        <MudNavLink Href="players" Icon="@Icons.Material.Rounded.People">Players</MudNavLink>
+        <MudNavLink Href="servers" Icon="@Icons.Material.Rounded.Dns">Servers</MudNavLink>
+    </MudNavGroup>
+
+    <MudNavGroup Title="SYSTEM" Expanded="false" Icon="@Icons.Material.Rounded.AdminPanelSettings" IconColor="Color.Warning">
+        <MudNavLink Href="admin/replay" Icon="@Icons.Material.Rounded.Replay">Replay Events</MudNavLink>
+        <MudNavLink Href="admin/events" Icon="@Icons.Material.Rounded.List">ZMQ Events</MudNavLink>
+    </MudNavGroup>
 </MudNavMenu>
+
+<style>
+    .mud-nav-menu-modern .mud-nav-link {
+        border-radius: 8px;
+        margin: 4px 8px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+
+    .mud-nav-menu-modern .mud-nav-link.active {
+        background-color: var(--mud-palette-primary-hover);
+        color: var(--mud-palette-primary);
+    }
+
+    .mud-nav-menu-modern .mud-nav-link:hover {
+        background-color: var(--mud-palette-action-hover);
+    }
+
+    .mud-nav-menu-modern .mud-nav-group-header {
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        color: var(--mud-palette-text-secondary);
+        margin-top: 12px;
+    }
+</style>

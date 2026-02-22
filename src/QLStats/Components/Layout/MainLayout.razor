@@ -1,26 +1,39 @@
 @inherits LayoutComponentBase
 
-<MudThemeProvider @ref="_themeProvider" @bind-IsDarkMode="_isDarkMode" />
+<MudThemeProvider @ref="_themeProvider" @bind-IsDarkMode="_isDarkMode" Theme="_theme" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
 <MudLayout>
-    <MudAppBar Elevation="1" Color="Color.Dark">
+    <MudAppBar Elevation="0" Class="border-b border-solid mud-border-lines-default" Color="Color.Surface">
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
             OnClick="@DrawerToggle" />
-        <MudText Typo="Typo.h6" Class="ml-3">QL Stats</MudText>
+        <MudText Typo="Typo.h5" Class="ml-3 font-weight-bold">
+            <span style="color: var(--mud-palette-primary)">QL</span> STATS
+        </MudText>
         <MudSpacer />
-        <MudIconButton Icon="@Icons.Material.Filled.DarkMode" Color="Color.Inherit"
-            OnClick="@ToggleDarkMode" title="Toggle dark mode" />
+        <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center">
+            <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" 
+                           Color="Color.Inherit"
+                           OnClick="@ToggleDarkMode" />
+        </MudStack>
     </MudAppBar>
 
-    <MudDrawer @bind-Open="_drawerOpen" Elevation="2" ClipMode="DrawerClipMode.Always">
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="0" ClipMode="DrawerClipMode.Always" 
+               Class="border-r border-solid mud-border-lines-default" Width="260px">
+        <MudDrawerHeader Class="pa-4">
+            <div class="d-flex flex-column">
+                <MudText Typo="Typo.subtitle2" Color="Color.Secondary" Class="mud-text-secondary">PRO LEAGUE TRACKER</MudText>
+            </div>
+        </MudDrawerHeader>
         <NavMenu />
     </MudDrawer>
 
-    <MudMainContent Class="pt-16 px-4">
-        @Body
+    <MudMainContent Class="pt-16 px-6">
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-6">
+            @Body
+        </MudContainer>
     </MudMainContent>
 </MudLayout>
 
@@ -31,4 +44,82 @@
 
     private void DrawerToggle() => _drawerOpen = !_drawerOpen;
     private void ToggleDarkMode() => _isDarkMode = !_isDarkMode;
+
+    private readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary = "#6366f1", // Indigo 500
+            AppbarBackground = "#ffffff",
+            AppbarText = "#1e293b",
+            Background = "#f8fafc",
+            DrawerBackground = "#ffffff",
+            DrawerText = "#475569",
+            Surface = "#ffffff",
+            ActionDefault = "#64748b",
+            Secondary = "#ec4899", // Pink 500
+            Success = "#22c55e",
+            Info = "#3b82f6",
+            Warning = "#f59e0b",
+            Error = "#ef4444",
+            LinesDefault = "#e2e8f0"
+        },
+        PaletteDark = new PaletteDark
+        {
+            Primary = "#818cf8", // Indigo 400
+            AppbarBackground = "#0f172a",
+            Background = "#0f172a",
+            DrawerBackground = "#0f172a",
+            Surface = "#1e293b",
+            Secondary = "#f472b6", // Pink 400
+            Success = "#4ade80",
+            Info = "#60a5fa",
+            Warning = "#fbbf24",
+            Error = "#f87171",
+            LinesDefault = "#334155",
+            ActionDefault = "#94a3b8",
+            TextPrimary = "#f1f5f9",
+            TextSecondary = "#94a3b8"
+        },
+        Typography = new Typography
+        {
+            Default = new DefaultTypography
+            {
+                FontFamily = ["Inter", "Roboto", "Helvetica", "Arial", "sans-serif"],
+                FontSize = ".875rem",
+                FontWeight = "400",
+                LineHeight = "1.5",
+                LetterSpacing = "0"
+            },
+            H4 = new H4Typography
+            {
+                FontSize = "1.5rem",
+                FontWeight = "700",
+                LineHeight = "1.2"
+            },
+            H5 = new H5Typography
+            {
+                FontSize = "1.25rem",
+                FontWeight = "700",
+                LineHeight = "1.2",
+                LetterSpacing = "-.02em"
+            },
+            H6 = new H6Typography
+            {
+                FontSize = "1rem",
+                FontWeight = "700",
+                LineHeight = "1.2"
+            },
+            Button = new ButtonTypography
+            {
+                TextTransform = "none",
+                FontWeight = "600",
+                FontSize = ".875rem"
+            }
+        },
+        LayoutProperties = new LayoutProperties
+        {
+            DefaultBorderRadius = "8px"
+        }
+    };
 }
