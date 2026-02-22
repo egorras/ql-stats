@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using QLStats.Data;
 using QLStats.Data.Entities;
+using QLStats.Events;
 
 namespace QLStats.Services;
 
@@ -17,6 +18,7 @@ public class MatchIngestionService(
         RoundOverData e     => HandleRoundOverAsync(e),
         PlayerStatsData e   => HandlePlayerStatsAsync(e),
         PlayerConnectData e => HandlePlayerConnectAsync(e),
+        PlayerMedalData e   => HandlePlayerMedalAsync(e),
         _                   => Task.CompletedTask
     };
 
@@ -146,6 +148,29 @@ public class MatchIngestionService(
             }
         }
         liveMatch.RecordRoundOver(data.TeamWon == "RED" ? 1 : 2, data.Round);
+    }
+
+    private async Task HandlePlayerMedalAsync(PlayerMedalData data)
+    {
+        liveMatch.RecordMedal(data.SteamId, data.Name, data.Medal, data.Total);
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var matchGuid = data.MatchGuid.ToString();
+        var match = await db.Matches.FirstOrDefaultAsync(m => m.MatchGuid == matchGuid);
+        if (match is null) return;
+
+        var player = await EnsurePlayerAsync(db, data.SteamId, data.Name);
+        var mp = await db.MatchPlayers
+            .FirstOrDefaultAsync(x => x.MatchId == match.Id && x.PlayerId == player.Id);
+
+        if (mp is null)
+        {
+            mp = new MatchPlayer { MatchId = match.Id, PlayerId = player.Id };
+            db.MatchPlayers.Add(mp);
+        }
+
+        mp.Medals[data.Medal] = data.Total;
+        await db.SaveChangesAsync();
     }
 
     private async Task HandlePlayerConnectAsync(PlayerConnectData data)

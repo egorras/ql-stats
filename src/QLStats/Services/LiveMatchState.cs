@@ -23,6 +23,7 @@ public class LivePlayerState
     public string Team { get; set; } = "";
     public int Kills { get; set; }
     public int Deaths { get; set; }
+    public Dictionary<string, int> Medals { get; set; } = new();
 }
 
 public class LiveMatchState
@@ -98,6 +99,17 @@ public class LiveMatchState
             if (!string.IsNullOrEmpty(map)) _current.Map = map;
             if (!string.IsNullOrEmpty(gameType)) _current.GameType = gameType;
             if (!string.IsNullOrEmpty(serverName)) _current.ServerName = serverName;
+        }
+        OnMatchStateChanged?.Invoke();
+    }
+
+    public void RecordMedal(string steamId, string name, string medal, int total)
+    {
+        lock (_lock)
+        {
+            if (_current is null) return;
+            var player = EnsurePlayer(steamId, name);
+            player.Medals[medal] = total;
         }
         OnMatchStateChanged?.Invoke();
     }

@@ -10,7 +10,8 @@ public enum ScoringRuleType
     RoundsWonMultiplier = 5,
     RoundsLostMultiplier = 6,
     DamageThresholdBonus = 7,
-    KillsThresholdBonus = 8
+    KillsThresholdBonus = 8,
+    MedalMultiplier = 9
 }
 
 public class ScoringRule
@@ -23,6 +24,7 @@ public class ScoringRule
     public decimal Value { get; set; }
     public decimal? Threshold { get; set; }
     public string? GameTypeFilter { get; set; } // e.g. "CA", "Duel"
+    public string? MedalType { get; set; }      // e.g. "Excellent", "Impressive"
     public int SortOrder { get; set; }
 
     public decimal Calculate(MatchPlayer mp)
@@ -41,6 +43,7 @@ public class ScoringRule
             ScoringRuleType.RoundsLostMultiplier => mp.RoundsLost * Value,
             ScoringRuleType.DamageThresholdBonus => mp.DamageDealt >= (Threshold ?? 0) ? Value : 0,
             ScoringRuleType.KillsThresholdBonus => mp.Kills >= (Threshold ?? 0) ? Value : 0,
+            ScoringRuleType.MedalMultiplier => mp.Medals.GetValueOrDefault(MedalType ?? "", 0) * Value,
             _ => 0
         };
     }
@@ -59,6 +62,7 @@ public class ScoringRule
             ScoringRuleType.RoundsLostMultiplier => $"Rounds Lost x {Value:0.####}{filter}",
             ScoringRuleType.DamageThresholdBonus => $"Damage >= {Threshold} Bonus {Value:0.####}{filter}",
             ScoringRuleType.KillsThresholdBonus => $"Kills >= {Threshold} Bonus {Value:0.####}{filter}",
+            ScoringRuleType.MedalMultiplier => $"{MedalType ?? "Medal"} x {Value:0.####}{filter}",
             _ => $"{Type}{filter}"
         };
     }

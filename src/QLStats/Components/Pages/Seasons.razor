@@ -75,11 +75,18 @@
                             <MudNumericField Label="Value" @bind-Value="rule.Value" Margin="Margin.Dense" Format="0.####" />
                         </MudItem>
                         <MudItem xs="3">
-                            <MudNumericField Label="Threshold" @bind-Value="rule.Threshold" Margin="Margin.Dense" 
+                            <MudNumericField Label="Threshold" @bind-Value="rule.Threshold" Margin="Margin.Dense"
                                 Disabled="@(!IsThresholdRule(rule.Type))" />
                         </MudItem>
                         <MudItem xs="3">
-                            <MudTextField Label="Filter (GT)" @bind-Value="rule.GameTypeFilter" Placeholder="e.g. CA" Margin="Margin.Dense" />
+                            @if (IsMedalRule(rule.Type))
+                            {
+                                <MudTextField Label="Medal Type" @bind-Value="rule.MedalType" Placeholder="e.g. Excellent" Margin="Margin.Dense" />
+                            }
+                            else
+                            {
+                                <MudTextField Label="Filter (GT)" @bind-Value="rule.GameTypeFilter" Placeholder="e.g. CA" Margin="Margin.Dense" />
+                            }
                         </MudItem>
                         <MudItem xs="3">
                             <MudNumericField Label="Order" @bind-Value="rule.SortOrder" Margin="Margin.Dense" />
@@ -129,6 +136,7 @@
                 Value = r.Value,
                 Threshold = r.Threshold,
                 GameTypeFilter = r.GameTypeFilter,
+                MedalType = r.MedalType,
                 SortOrder = r.SortOrder
             }).ToList() ?? new List<ScoringRule>
             {
@@ -153,7 +161,8 @@
             Rules = s.Rules.OrderBy(r => r.SortOrder).Select(r => new ScoringRule
             {
                 Id = r.Id, Type = r.Type,
-                Value = r.Value, Threshold = r.Threshold, GameTypeFilter = r.GameTypeFilter,
+                Value = r.Value, Threshold = r.Threshold,
+                GameTypeFilter = r.GameTypeFilter, MedalType = r.MedalType,
                 SortOrder = r.SortOrder
             }).ToList()
         };
@@ -179,11 +188,14 @@
         ScoringRuleType.RoundsLostMultiplier => "Rounds Lost Multiplier",
         ScoringRuleType.DamageThresholdBonus => "Damage Threshold Bonus",
         ScoringRuleType.KillsThresholdBonus => "Kills Threshold Bonus",
+        ScoringRuleType.MedalMultiplier => "Medal Multiplier",
         _ => type.ToString()
     };
 
-    private bool IsThresholdRule(ScoringRuleType type) => 
+    private bool IsThresholdRule(ScoringRuleType type) =>
         type == ScoringRuleType.DamageThresholdBonus || type == ScoringRuleType.KillsThresholdBonus;
+
+    private bool IsMedalRule(ScoringRuleType type) => type == ScoringRuleType.MedalMultiplier;
 
     private async Task SaveSeasonAsync()
     {
@@ -217,7 +229,8 @@
                     existing.Rules.Add(new ScoringRule
                     {
                         Type = r.Type,
-                        Value = r.Value, Threshold = r.Threshold, GameTypeFilter = r.GameTypeFilter,
+                        Value = r.Value, Threshold = r.Threshold,
+                        GameTypeFilter = r.GameTypeFilter, MedalType = r.MedalType,
                         SortOrder = r.SortOrder
                     });
                 }

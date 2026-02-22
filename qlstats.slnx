@@ -4,4 +4,7 @@
     <Project Path="src/QLStats.ServiceDefaults/QLStats.ServiceDefaults.csproj" />
     <Project Path="src/QLStats/QLStats.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/QLStats.Tests/QLStats.Tests.csproj" />
+  </Folder>
 </Solution>

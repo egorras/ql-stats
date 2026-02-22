@@ -1,7 +1,6 @@
-using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace QLStats.Services;
+namespace QLStats.Events;
 
 public abstract record QlEvent
 {
@@ -118,16 +117,4 @@ public record QlEnvelope<TData> : QlEnvelope where TData : QlEvent
 {
     public TData? Data { get; init; }
     public override QlEvent? GetEvent() => Data;
-}
-
-public static class QLEventParser
-{
-    private static readonly JsonSerializerOptions JsonSerializerOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseUpper
-    };
-
-    public static QlEnvelope? Parse(string rawJson) =>
-        JsonSerializer.Deserialize<QlEnvelope>(rawJson, JsonSerializerOptions);
 }

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using QLStats.Data;
+using QLStats.Events;
 
 namespace QLStats.Services;
 

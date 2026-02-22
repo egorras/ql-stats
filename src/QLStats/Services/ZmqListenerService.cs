@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using NetMQ;
 using NetMQ.Sockets;
 using QLStats.Data;
+using QLStats.Events;
 
 namespace QLStats.Services;
 

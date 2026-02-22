@@ -67,6 +67,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.HasIndex(mp => new { mp.MatchId, mp.PlayerId }).IsUnique();
             e.Property(mp => mp.Team).HasMaxLength(8);
+            e.Property(mp => mp.Medals).HasColumnType("jsonb");
             e.HasOne(mp => mp.Match)
                 .WithMany(m => m.MatchPlayers)
                 .HasForeignKey(mp => mp.MatchId)
@@ -103,6 +104,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(r => r.Value).HasPrecision(10, 6);
             e.Property(r => r.Threshold).HasPrecision(10, 6);
             e.Property(r => r.GameTypeFilter).HasMaxLength(32);
+            e.Property(r => r.MedalType).HasMaxLength(64);
             e.HasOne(r => r.Season)
                 .WithMany(s => s.Rules)
                 .HasForeignKey(r => r.SeasonId)

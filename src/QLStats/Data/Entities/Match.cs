@@ -1,3 +1,4 @@
+using QLStats.Events;
 using QLStats.Services;
 
 namespace QLStats.Data.Entities;
