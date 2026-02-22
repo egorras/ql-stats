@@ -11,7 +11,8 @@ Quake Live statistics tracker. .NET 10 Blazor Server app orchestrated by .NET As
 
 ## Common Commands
 - `dotnet run --project src/QLStats.AppHost` — start full stack (Aspire dashboard + app)
-- `dotnet build src/QLStats/QLStats.csproj` — build main project only
+- `dotnet build qlstats.slnx` — build full solution
+- `dotnet test qlstats.slnx` — run all tests
 - `dotnet ef migrations add <Name> --project src/QLStats` — add EF migration
 - `dotnet ef database update --project src/QLStats` — apply pending migrations manually
 
@@ -21,13 +22,10 @@ Quake Live statistics tracker. .NET 10 Blazor Server app orchestrated by .NET As
 - `src/QLStats/Components/Pages/` — Blazor pages
 - `src/QLStats/Mcp/QlStatsMcpTools.cs` — MCP tool definitions
 - `src/QLStats.ServiceDefaults/` — shared OpenTelemetry, health checks, service discovery config
+- `tests/QLStats.Tests/` — unit and integration tests
 
-## Notes
-- Connection string named `qlstats-db`; injected by Aspire in dev, set in appsettings for prod
-- User secrets ID: `qlstats-app`; AppHost user secrets ID: `qlstats-apphost`
-- `appsettings.Development.json` contains a working local DB connection string — no secrets needed for basic local dev
-- `ZmqListenerService` is registered as both singleton and `IHostedService`; use `IZmqListenerControl` to trigger reload
-- No test projects currently exist
+## CI/CD
+- GitHub Action defined in `.github/workflows/dotnet.yml` builds and tests the solution on push/PR to `main`.
 
 ## MCP Tools (8 available at `/mcp`)
 `ListSeasons`, `GetSeasonStandings`, `ListPlayers`, `GetPlayerStats`, `GetMatchDetails`, `QueryMatches`, `GetHeadToHead`
