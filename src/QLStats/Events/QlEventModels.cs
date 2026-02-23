@@ -15,6 +15,7 @@ public record MatchStartedPlayer
     public string SteamId { get; init; } = "";
     public string Name { get; init; } = "";
     public int Team { get; init; }
+    public bool Bot { get; init; }
 }
 
 public record MatchStartedData : QlEvent
@@ -44,6 +45,7 @@ public record PlayerActor
     public string Name { get; init; } = "";
     public string Weapon { get; init; } = "";
     public int Team { get; init; }
+    public bool Bot { get; init; }
 }
 
 public record PlayerKillData : QlEvent
@@ -80,6 +82,7 @@ public record PlayerStatsData : QlEvent
     public int Win { get; init; }
     public bool Aborted { get; init; }
     public int Quit { get; init; }
+    public bool Bot { get; init; }
 }
 
 // PLAYER_CONNECT
@@ -87,6 +90,7 @@ public record PlayerConnectData : QlEvent
 {
     public string SteamId { get; init; } = "";
     public string Name { get; init; } = "";
+    public bool Bot { get; init; }
 }
 
 // PLAYER_MEDAL
@@ -96,6 +100,7 @@ public record PlayerMedalData : QlEvent
     public string Name { get; init; } = "";
     public string Medal { get; init; } = "";
     public int Total { get; init; }
+    public bool Bot { get; init; }
 }
 
 public abstract record QlEnvelope

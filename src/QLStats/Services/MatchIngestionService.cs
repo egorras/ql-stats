@@ -47,8 +47,9 @@ public class MatchIngestionService(
         // Reset round-end tracking for this new match
         _roundEndTimes.TryRemove(matchGuid, out _);
 
-        var livePlayers = data.Players?.Select(p =>
-            (p.SteamId, p.Name, p.Team == 1 ? "RED" : p.Team == 2 ? "BLUE" : ""));
+        var livePlayers = data.Players?
+            .Where(p => !p.Bot)
+            .Select(p => (p.SteamId, p.Name, p.Team == 1 ? "RED" : p.Team == 2 ? "BLUE" : ""));
         liveMatch.StartMatch(matchGuid, data.Map, data.GameType, data.ServerTitle, livePlayers);
     }
 
@@ -90,6 +91,8 @@ public class MatchIngestionService(
 
     private async Task HandlePlayerStatsAsync(PlayerStatsData data)
     {
+        if (data.Bot) return;
+
         await using var db = await dbFactory.CreateDbContextAsync();
 
         var matchGuid = data.MatchGuid.ToString();
@@ -135,6 +138,9 @@ public class MatchIngestionService(
         {
             return;
         }
+
+        if (data.Killer?.Bot == true || data.Victim?.Bot == true)
+            return;
 
         await using var db = await dbFactory.CreateDbContextAsync();
         var match = await db.Matches.FirstOrDefaultAsync(m => m.MatchGuid == matchGuid);
@@ -195,6 +201,8 @@ public class MatchIngestionService(
 
     private async Task HandlePlayerMedalAsync(PlayerMedalData data)
     {
+        if (data.Bot) return;
+
         liveMatch.RecordMedal(data.SteamId, data.Name, data.Medal, data.Total);
 
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -211,6 +219,8 @@ public class MatchIngestionService(
 
     private async Task HandlePlayerConnectAsync(PlayerConnectData data)
     {
+        if (data.Bot) return;
+
         await using var db = await dbFactory.CreateDbContextAsync();
         await EnsurePlayerAsync(db, data.SteamId, data.Name);
         await db.SaveChangesAsync();

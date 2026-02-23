@@ -27,6 +27,7 @@ public class MatchIngestionServiceTests
         var sut = new MatchIngestionService(
             new TestDbContextFactory(options), live,
             new StandingsNotifier(),
+            new StandingsService(new TestDbContextFactory(options), NullLogger<StandingsService>.Instance),
             NullLogger<MatchIngestionService>.Instance);
 
         return (sut, live, options);
@@ -237,6 +238,77 @@ public class MatchIngestionServiceTests
         }, ServerId);
 
         Assert.Null(live.Current); // ended
+    }
+
+    // ── Bot filtering ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task BotPlayer_Stats_NotIngested()
+    {
+        var (sut, _, options) = CreateSut();
+
+        await sut.HandleAsync(new MatchStartedData
+        {
+            MatchGuid = MatchGuid, Map = "campgrounds", GameType = "CA", ServerTitle = "S"
+        }, ServerId);
+
+        await sut.HandleAsync(new PlayerStatsData
+        {
+            MatchGuid = MatchGuid, SteamId = "bot1", Name = "Ranger", Bot = true,
+            Team = 1, Win = 1, Damage = new() { Dealt = 500, Taken = 200 }
+        }, ServerId);
+
+        await using var db = new AppDbContext(options);
+        Assert.Empty(db.Players.ToList());
+        Assert.Empty(db.MatchPlayers.ToList());
+    }
+
+    [Fact]
+    public async Task BotPlayer_Kill_NotCounted()
+    {
+        var (sut, _, options) = CreateSut();
+
+        await sut.HandleAsync(new MatchStartedData
+        {
+            MatchGuid = MatchGuid, Map = "campgrounds", GameType = "CA", ServerTitle = "S"
+        }, ServerId);
+
+        // Establish the human player via PLAYER_STATS before bot-kill events
+        await sut.HandleAsync(new PlayerStatsData
+        {
+            MatchGuid = MatchGuid, SteamId = "111", Name = "Human",
+            Team = 1, Win = 0, Damage = new() { Dealt = 100, Taken = 50 }
+        }, ServerId);
+
+        // Bot kills a human — human should not receive a death
+        await sut.HandleAsync(new PlayerKillData
+        {
+            MatchGuid = MatchGuid,
+            Killer = new() { SteamId = "bot1", Name = "Ranger", Weapon = "ROCKET", Bot = true },
+            Victim = new() { SteamId = "111",  Name = "Human",  Weapon = "NONE" },
+            Mod = "ROCKET"
+        }, ServerId);
+
+        // Human kills a bot — human should not receive a kill credit
+        await sut.HandleAsync(new PlayerKillData
+        {
+            MatchGuid = MatchGuid,
+            Killer = new() { SteamId = "111", Name = "Human", Weapon = "ROCKET" },
+            Victim = new() { SteamId = "bot1", Name = "Ranger", Weapon = "NONE", Bot = true },
+            Mod = "ROCKET"
+        }, ServerId);
+
+        await using var db2 = new AppDbContext(options);
+        var human = db2.Players.FirstOrDefault(p => p.SteamId == "111");
+        var bot   = db2.Players.FirstOrDefault(p => p.SteamId == "bot1");
+
+        Assert.NotNull(human);
+        Assert.Null(bot); // bot player record never created
+
+        var humanMp = db2.MatchPlayers.FirstOrDefault(mp => mp.PlayerId == human!.Id);
+        Assert.NotNull(humanMp);
+        Assert.Equal(0, humanMp.Kills);  // killing a bot not credited
+        Assert.Equal(0, humanMp.Deaths); // dying to a bot not recorded
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
