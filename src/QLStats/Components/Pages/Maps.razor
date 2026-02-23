@@ -1,0 +1,202 @@
+@page "/maps"
+@rendermode InteractiveServer
+@using QLStats.Services
+@inject MapAnalyticsService MapService
+@inject DuoAnalyticsService DuoService
+@inject MudBlazor.IDialogService DialogService
+
+<PageTitle>Maps — QL Stats</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Maps</MudText>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_maps.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">No match data available yet.</MudAlert>
+}
+else
+{
+    <MudGrid>
+        @foreach (var map in _maps)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Style="cursor:pointer" @onclick="() => OpenMapDialog(map)">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">@map.MapName</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @map.TotalMatches matches · Last: @(map.LastPlayed?.ToString("MMM d, yyyy") ?? "—")
+                            </MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <div class="d-flex gap-2 mb-2">
+                            <MudChip T="string" Color="Color.Error" Size="Size.Small">RED @map.RedWins W</MudChip>
+                            <MudChip T="string" Color="Color.Info" Size="Size.Small">BLUE @map.BlueWins W</MudChip>
+                        </div>
+                        @if (map.Top3Players.Count > 0)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Top Players</MudText>
+                            @foreach (var p in map.Top3Players)
+                            {
+                                <MudText Typo="Typo.body2">@p.DisplayName — @p.WinRate% WR (@p.Matches M)</MudText>
+                            }
+                        }
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@if (_selectedMap is not null)
+{
+    <MudDialog @bind-Visible="_dialogOpen" Options="_dialogOptions">
+        <TitleContent>
+            <MudText Typo="Typo.h6">@_selectedMap.MapName</MudText>
+        </TitleContent>
+        <DialogContent>
+            <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true">
+                <MudTabPanel Text="Overview">
+                    <MudText Typo="Typo.subtitle2" Class="mt-3 mb-2">Game Types</MudText>
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        @foreach (var gt in _gameTypes)
+                        {
+                            <MudChip T="string" Size="Size.Small">@gt.GameType (@gt.Count)</MudChip>
+                        }
+                    </div>
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Top 10 Players</MudText>
+                    <MudTable Items="_mapPlayers.Take(10).ToList()" Dense="true" Hover="true" Elevation="0">
+                        <HeaderContent>
+                            <MudTh>Player</MudTh>
+                            <MudTh>M</MudTh>
+                            <MudTh>W%</MudTh>
+                            <MudTh>K/D</MudTh>
+                            <MudTh>Dmg</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>@context.DisplayName</MudTd>
+                            <MudTd>@context.Matches</MudTd>
+                            <MudTd>@context.WinRate%</MudTd>
+                            <MudTd>@context.KD.ToString("0.##")</MudTd>
+                            <MudTd>@context.DamageDealt.ToString("N0")</MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudTabPanel>
+
+                <MudTabPanel Text="Players">
+                    <MudTable Items="_mapPlayers" Dense="true" Hover="true" Elevation="0" Class="mt-3">
+                        <HeaderContent>
+                            <MudTh>Player</MudTh>
+                            <MudTh>M</MudTh>
+                            <MudTh>W</MudTh>
+                            <MudTh>L</MudTh>
+                            <MudTh>W%</MudTh>
+                            <MudTh>K</MudTh>
+                            <MudTh>D</MudTh>
+                            <MudTh>K/D</MudTh>
+                            <MudTh>Dmg</MudTh>
+                            <MudTh>Medals</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>@context.DisplayName</MudTd>
+                            <MudTd>@context.Matches</MudTd>
+                            <MudTd>@context.Wins</MudTd>
+                            <MudTd>@context.Losses</MudTd>
+                            <MudTd>@context.WinRate%</MudTd>
+                            <MudTd>@context.Kills</MudTd>
+                            <MudTd>@context.Deaths</MudTd>
+                            <MudTd>@context.KD.ToString("0.##")</MudTd>
+                            <MudTd>@context.DamageDealt.ToString("N0")</MudTd>
+                            <MudTd>
+                                @if (context.TopMedals.Count > 0)
+                                {
+                                    <MudTooltip>
+                                        <TooltipContent>
+                                            @foreach (var kv in context.TopMedals)
+                                            {
+                                                <div>@kv.Key: @kv.Value</div>
+                                            }
+                                        </TooltipContent>
+                                        <ChildContent>
+                                            <MudIcon Icon="@Icons.Material.Filled.MilitaryTech" Size="Size.Small" />
+                                        </ChildContent>
+                                    </MudTooltip>
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudTabPanel>
+
+                <MudTabPanel Text="Duos">
+                    @if (_duos.Count == 0)
+                    {
+                        <MudAlert Severity="Severity.Info" Class="mt-3">No duo data for this map yet.</MudAlert>
+                    }
+                    else
+                    {
+                        <MudTable Items="_duos" Dense="true" Hover="true" Elevation="0" Class="mt-3">
+                            <HeaderContent>
+                                <MudTh>Player 1</MudTh>
+                                <MudTh>Player 2</MudTh>
+                                <MudTh>M</MudTh>
+                                <MudTh>W</MudTh>
+                                <MudTh>W%</MudTh>
+                                <MudTh>Avg K</MudTh>
+                                <MudTh>Avg Dmg</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd>@context.Player1Name</MudTd>
+                                <MudTd>@context.Player2Name</MudTd>
+                                <MudTd>@context.MatchesPlayed</MudTd>
+                                <MudTd>@context.Wins</MudTd>
+                                <MudTd>@context.WinRate%</MudTd>
+                                <MudTd>@context.AvgKillsPerMatch</MudTd>
+                                <MudTd>@context.AvgDamagePerMatch.ToString("N0")</MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    }
+                </MudTabPanel>
+            </MudTabs>
+        </DialogContent>
+        <DialogActions>
+            <MudButton OnClick="() => _dialogOpen = false">Close</MudButton>
+        </DialogActions>
+    </MudDialog>
+}
+
+@code {
+    private bool _loading = true;
+    private List<MapSummary> _maps = [];
+
+    private bool _dialogOpen;
+    private MapSummary? _selectedMap;
+    private List<MapPlayerStats> _mapPlayers = [];
+    private List<MapGameTypeBreakdown> _gameTypes = [];
+    private List<DuoStats> _duos = [];
+
+    private readonly MudBlazor.DialogOptions _dialogOptions = new()
+    {
+        MaxWidth = MudBlazor.MaxWidth.Large,
+        FullWidth = true
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _maps = await MapService.GetMapSummariesAsync();
+        _loading = false;
+    }
+
+    private async Task OpenMapDialog(MapSummary map)
+    {
+        _selectedMap = map;
+        _dialogOpen = true;
+
+        _mapPlayers = await MapService.GetMapPlayerStatsAsync(map.MapName);
+        _gameTypes = await MapService.GetMapGameTypeBreakdownAsync(map.MapName);
+        _duos = await DuoService.GetDuoStatsAsync(mapName: map.MapName);
+    }
+}

@@ -12,8 +12,8 @@ using QLStats.Data;
 namespace QLStats.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260222094910_RemoveGameSession")]
-    partial class RemoveGameSession
+    [Migration("20260223161155_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -29,298 +29,382 @@ namespace QLStats.Data.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime?>("FinishedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finished_at");
 
                     b.Property<string>("GameType")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("game_type");
 
                     b.Property<string>("Map")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("map");
 
                     b.Property<string>("MatchGuid")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("match_guid");
 
                     b.Property<int>("QLServerId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("ql_server_id");
 
                     b.Property<string>("ServerTitle")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("server_title");
 
                     b.Property<DateTime>("StartedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
 
                     b.Property<int?>("TeamBlueRounds")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("team_blue_rounds");
 
                     b.Property<int?>("TeamRedRounds")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("team_red_rounds");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_matches");
 
                     b.HasIndex("MatchGuid")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_matches_match_guid");
 
-                    b.HasIndex("QLServerId");
+                    b.HasIndex("QLServerId")
+                        .HasDatabaseName("ix_matches_ql_server_id");
 
-                    b.HasIndex("StartedAt");
+                    b.HasIndex("StartedAt")
+                        .HasDatabaseName("ix_matches_started_at");
 
-                    b.ToTable("Matches");
+                    b.ToTable("matches", (string)null);
                 });
 
             modelBuilder.Entity("QLStats.Data.Entities.MatchPlayer", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<int>("DamageDealt")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("damage_dealt");
 
                     b.Property<int>("DamageTaken")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("damage_taken");
 
                     b.Property<int>("Deaths")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("deaths");
 
                     b.Property<int>("Kills")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("kills");
 
                     b.Property<int>("MatchId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("match_id");
 
                     b.Property<string>("Medals")
                         .IsRequired()
-                        .HasColumnType("jsonb");
+                        .HasColumnType("jsonb")
+                        .HasColumnName("medals");
 
                     b.Property<int>("PlayerId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("player_id");
 
                     b.Property<int>("RoundsLost")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("rounds_lost");
 
                     b.Property<int>("RoundsWon")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("rounds_won");
 
                     b.Property<int>("Suicides")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("suicides");
 
                     b.Property<string>("Team")
                         .IsRequired()
                         .HasMaxLength(8)
-                        .HasColumnType("character varying(8)");
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("team");
+
+                    b.Property<string>("Weapons")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("weapons");
 
                     b.Property<bool>("Won")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("won");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_match_players");
 
-                    b.HasIndex("PlayerId");
+                    b.HasIndex("PlayerId")
+                        .HasDatabaseName("ix_match_players_player_id");
 
                     b.HasIndex("MatchId", "PlayerId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_match_players_match_id_player_id");
 
-                    b.ToTable("MatchPlayers");
+                    b.ToTable("match_players", (string)null);
                 });
 
             modelBuilder.Entity("QLStats.Data.Entities.Player", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("DisplayName")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("display_name");
 
                     b.Property<DateTime>("FirstSeenAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_seen_at");
 
                     b.Property<DateTime>("LastSeenAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at");
 
                     b.Property<string>("SteamId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("steam_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_players");
 
                     b.HasIndex("SteamId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_players_steam_id");
 
-                    b.ToTable("Players");
+                    b.ToTable("players", (string)null);
                 });
 
             modelBuilder.Entity("QLStats.Data.Entities.QLServer", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
 
                     b.Property<int>("ReconnectIntervalMs")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("reconnect_interval_ms");
 
                     b.Property<string>("ZmqAddress")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("zmq_address");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_ql_servers");
 
-                    b.ToTable("QLServers");
+                    b.ToTable("ql_servers", (string)null);
                 });
 
             modelBuilder.Entity("QLStats.Data.Entities.RoundResult", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<int>("MatchId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("match_id");
 
                     b.Property<int>("RoundNumber")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("round_number");
 
                     b.Property<string>("TeamWon")
                         .IsRequired()
                         .HasMaxLength(8)
-                        .HasColumnType("character varying(8)");
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("team_won");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_round_results");
 
-                    b.HasIndex("MatchId", "RoundNumber");
+                    b.HasIndex("MatchId", "RoundNumber")
+                        .HasDatabaseName("ix_round_results_match_id_round_number");
 
-                    b.ToTable("RoundResults");
+                    b.ToTable("round_results", (string)null);
                 });
 
             modelBuilder.Entity("QLStats.Data.Entities.ScoringRule", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("GameTypeFilter")
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("game_type_filter");
 
                     b.Property<string>("MedalType")
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("medal_type");
 
                     b.Property<int>("SeasonId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("season_id");
 
                     b.Property<int>("SortOrder")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
 
                     b.Property<decimal?>("Threshold")
                         .HasPrecision(10, 6)
-                        .HasColumnType("numeric(10,6)");
+                        .HasColumnType("numeric(10,6)")
+                        .HasColumnName("threshold");
 
                     b.Property<int>("Type")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("type");
 
                     b.Property<decimal>("Value")
                         .HasPrecision(10, 6)
-                        .HasColumnType("numeric(10,6)");
+                        .HasColumnType("numeric(10,6)")
+                        .HasColumnName("value");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_scoring_rules");
 
-                    b.HasIndex("SeasonId");
+                    b.HasIndex("SeasonId")
+                        .HasDatabaseName("ix_scoring_rules_season_id");
 
-                    b.ToTable("ScoringRules");
+                    b.ToTable("scoring_rules", (string)null);
                 });
 
             modelBuilder.Entity("QLStats.Data.Entities.Season", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<DateOnly?>("EndDate")
-                        .HasColumnType("date");
+                        .HasColumnType("date")
+                        .HasColumnName("end_date");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("name");
 
                     b.Property<DateOnly>("StartDate")
-                        .HasColumnType("date");
+                        .HasColumnType("date")
+                        .HasColumnName("start_date");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_seasons");
 
-                    b.ToTable("Seasons");
+                    b.HasIndex("IsActive")
+                        .IsUnique()
+                        .HasDatabaseName("ix_seasons_one_active")
+                        .HasFilter("is_active = true");
+
+                    b.ToTable("seasons", (string)null);
                 });
 
             modelBuilder.Entity("QLStats.Data.Entities.ZmqEvent", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("EventType")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("event_type");
 
                     b.Property<bool>("Processed")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("processed");
 
                     b.Property<int>("QLServerId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("ql_server_id");
 
                     b.Property<string>("RawJson")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("raw_json");
 
                     b.Property<DateTime>("ReceivedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_zmq_events");
 
-                    b.HasIndex("Processed");
+                    b.HasIndex("Processed")
+                        .HasDatabaseName("ix_zmq_events_processed");
 
-                    b.HasIndex("QLServerId");
+                    b.HasIndex("QLServerId")
+                        .HasDatabaseName("ix_zmq_events_ql_server_id");
 
-                    b.HasIndex("ReceivedAt");
+                    b.HasIndex("ReceivedAt")
+                        .HasDatabaseName("ix_zmq_events_received_at");
 
-                    b.ToTable("ZmqEvents");
+                    b.ToTable("zmq_events", (string)null);
                 });
 
             modelBuilder.Entity("QLStats.Data.Entities.Match", b =>
@@ -329,7 +413,8 @@ namespace QLStats.Data.Migrations
                         .WithMany("Matches")
                         .HasForeignKey("QLServerId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_matches_ql_servers_ql_server_id");
 
                     b.Navigation("QLServer");
                 });
@@ -340,13 +425,15 @@ namespace QLStats.Data.Migrations
                         .WithMany("MatchPlayers")
                         .HasForeignKey("MatchId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_match_players_matches_match_id");
 
                     b.HasOne("QLStats.Data.Entities.Player", "Player")
                         .WithMany("MatchPlayers")
                         .HasForeignKey("PlayerId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_match_players_players_player_id");
 
                     b.Navigation("Match");
 
@@ -359,7 +446,8 @@ namespace QLStats.Data.Migrations
                         .WithMany("RoundResults")
                         .HasForeignKey("MatchId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_round_results_matches_match_id");
 
                     b.Navigation("Match");
                 });
@@ -370,7 +458,8 @@ namespace QLStats.Data.Migrations
                         .WithMany("Rules")
                         .HasForeignKey("SeasonId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_scoring_rules_seasons_season_id");
 
                     b.Navigation("Season");
                 });
@@ -381,7 +470,8 @@ namespace QLStats.Data.Migrations
                         .WithMany("ZmqEvents")
                         .HasForeignKey("QLServerId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_zmq_events_ql_servers_ql_server_id");
 
                     b.Navigation("QLServer");
                 });

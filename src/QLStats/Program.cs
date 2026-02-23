@@ -11,11 +11,12 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 
 // Database — reads "qlstats-db" connection string from Aspire env injection or appsettings
+// Aspire injects this at runtime; the fallback is used only by EF Core design-time tools.
 var connStr = builder.Configuration.GetConnectionString("qlstats-db")
-    ?? throw new InvalidOperationException("Connection string 'qlstats-db' not found.");
+    ?? "Host=localhost;Database=qlstats;Username=qlstats;Password=dev";
 
 builder.Services.AddDbContextFactory<AppDbContext>(options =>
-    options.UseNpgsql(connStr));
+    options.UseNpgsql(connStr).UseSnakeCaseNamingConvention());
 
 // Scoped AppDbContext for Blazor pages/scoped services — created via the factory to avoid
 // the root-scope conflict that arises when AddDbContext and AddDbContextFactory coexist.
@@ -25,9 +26,13 @@ builder.Services.AddScoped(sp =>
 // Application services
 builder.Services.AddSingleton<LiveMatchState>();
 builder.Services.AddSingleton<EventStoreService>();
+builder.Services.AddSingleton<StandingsNotifier>();
 builder.Services.AddSingleton<MatchIngestionService>();
-builder.Services.AddScoped<StandingsService>();
+builder.Services.AddSingleton<StandingsService>();
+builder.Services.AddScoped<DuoAnalyticsService>();
+builder.Services.AddScoped<MapAnalyticsService>();
 builder.Services.AddScoped<EventReplayService>();
+builder.Services.AddScoped<LegacyMigrationService>();
 
 // ZMQ listener — registered as singleton + IHostedService + IZmqListenerControl
 builder.Services.AddSingleton<ZmqListenerService>();

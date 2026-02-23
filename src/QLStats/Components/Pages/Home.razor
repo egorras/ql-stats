@@ -5,6 +5,8 @@
 @using QLStats.Services
 @inject AppDbContext Db
 @inject StandingsService StandingsService
+@inject DuoAnalyticsService DuoService
+@inject StandingsNotifier StandingsNotifier
 @inject LiveMatchState LiveMatch
 @implements IDisposable
 
@@ -90,6 +92,52 @@ else if (_liveMatch is not null)
     </MudAlert>
 }
 
+@if (_activeSeason is not null && _standings.Count > 0)
+{
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-3 d-flex align-center gap-3" Elevation="2">
+                <MudIcon Icon="@Icons.Material.Filled.EmojiEvents" Color="Color.Warning" Size="Size.Large" />
+                <div>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Top Scorer</MudText>
+                    <MudText Typo="Typo.body1"><strong>@(_standings.FirstOrDefault()?.DisplayName ?? "—")</strong></MudText>
+                    <MudText Typo="Typo.caption">@(_standings.FirstOrDefault()?.TotalPoints.ToString("0.##") ?? "0") pts</MudText>
+                </div>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-3 d-flex align-center gap-3" Elevation="2">
+                <MudIcon Icon="@Icons.Material.Filled.GpsFixed" Color="Color.Success" Size="Size.Large" />
+                <div>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Best K/D (min 3 matches)</MudText>
+                    <MudText Typo="Typo.body1"><strong>@(_bestKd?.DisplayName ?? "—")</strong></MudText>
+                    <MudText Typo="Typo.caption">@(_bestKd is not null ? (_bestKd.Deaths == 0 ? _bestKd.Kills.ToString() : ((double)_bestKd.Kills / _bestKd.Deaths).ToString("0.##")) : "—")</MudText>
+                </div>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-3 d-flex align-center gap-3" Elevation="2">
+                <MudIcon Icon="@Icons.Material.Filled.Whatshot" Color="Color.Error" Size="Size.Large" />
+                <div>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Most Damage</MudText>
+                    <MudText Typo="Typo.body1"><strong>@(_mostDamage?.DisplayName ?? "—")</strong></MudText>
+                    <MudText Typo="Typo.caption">@(_mostDamage?.DamageDealt.ToString("N0") ?? "0")</MudText>
+                </div>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-3 d-flex align-center gap-3" Elevation="2">
+                <MudIcon Icon="@Icons.Material.Filled.Group" Color="Color.Info" Size="Size.Large" />
+                <div>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Top Duo (min 3 matches)</MudText>
+                    <MudText Typo="Typo.body1"><strong>@(_topDuo is not null ? $"{_topDuo.Player1Name} & {_topDuo.Player2Name}" : "—")</strong></MudText>
+                    <MudText Typo="Typo.caption">@(_topDuo is not null ? $"{_topDuo.WinRate}% WR in {_topDuo.MatchesPlayed} matches" : "—")</MudText>
+                </div>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
 <MudGrid>
     <MudItem xs="12" md="8">
         @if (_activeSeason is not null && _standings.Count > 0)
@@ -98,6 +146,10 @@ else if (_liveMatch is not null)
                 <MudCardHeader>
                     <CardHeaderContent>
                         <MudText Typo="Typo.h6">@_activeSeason.Name — Standings</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            @_activeSeason.StartDate.ToString("MMM d, yyyy") –
+                            @(_activeSeason.EndDate?.ToString("MMM d, yyyy") ?? "ongoing")
+                        </MudText>
                     </CardHeaderContent>
                     <CardHeaderActions>
                         <MudButton Href="@($"/seasons/{_activeSeason.Id}")" Variant="Variant.Text">Full standings</MudButton>
@@ -173,6 +225,9 @@ else if (_liveMatch is not null)
     private List<PlayerStanding> _standings = [];
     private List<Match> _recentMatches = [];
     private LiveMatchDto? _liveMatch;
+    private PlayerStanding? _bestKd;
+    private PlayerStanding? _mostDamage;
+    private DuoStats? _topDuo;
 
     private record LiveProjection(
         string Name, string Team,
@@ -184,8 +239,14 @@ else if (_liveMatch is not null)
     protected override async Task OnInitializedAsync()
     {
         LiveMatch.OnMatchStateChanged += HandleMatchStateChanged;
+        StandingsNotifier.StandingsChanged += HandleStandingsChanged;
         _liveMatch = LiveMatch.Current;
 
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
         _activeSeason = await Db.Seasons
             .Include(s => s.Rules)
             .FirstOrDefaultAsync(s => s.IsActive);
@@ -194,6 +255,19 @@ else if (_liveMatch is not null)
         {
             try { _standings = await StandingsService.GetSeasonStandingsAsync(_activeSeason.Id); }
             catch { _standings = []; }
+
+            _bestKd = _standings
+                .Where(s => s.MatchesPlayed >= 3)
+                .OrderByDescending(s => s.Deaths == 0 ? (double)s.Kills : (double)s.Kills / s.Deaths)
+                .FirstOrDefault();
+            _mostDamage = _standings.MaxBy(s => s.DamageDealt);
+
+            try
+            {
+                var duos = await DuoService.GetDuoStatsAsync(seasonId: _activeSeason.Id, topN: 1);
+                _topDuo = duos.FirstOrDefault(d => d.MatchesPlayed >= 3);
+            }
+            catch { _topDuo = null; }
         }
 
         _recentMatches = await Db.Matches
@@ -241,5 +315,18 @@ else if (_liveMatch is not null)
         InvokeAsync(StateHasChanged);
     }
 
-    public void Dispose() => LiveMatch.OnMatchStateChanged -= HandleMatchStateChanged;
+    private void HandleStandingsChanged()
+    {
+        InvokeAsync(async () =>
+        {
+            await LoadDataAsync();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        LiveMatch.OnMatchStateChanged -= HandleMatchStateChanged;
+        StandingsNotifier.StandingsChanged -= HandleStandingsChanged;
+    }
 }

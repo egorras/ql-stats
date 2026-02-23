@@ -45,6 +45,14 @@
                                                Placeholder="Ongoing"
                                                Variant="Variant.Outlined" Margin="Margin.Dense" />
                             </MudItem>
+                            @if (_matchCount >= 0)
+                            {
+                                <MudItem xs="12">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        @_matchCount finished match@(_matchCount == 1 ? "" : "es") currently assigned to this season — assignment updates automatically when dates change.
+                                    </MudText>
+                                </MudItem>
+                            }
                             <MudItem xs="12">
                                 <MudSwitch T="bool" @bind-Value="_season.IsActive" Label="Set as Active Season" Color="Color.Success" />
                             </MudItem>
@@ -80,25 +88,20 @@
                                             </MudSelect>
                                         </MudItem>
                                         <MudItem xs="6" sm="2">
-                                            <MudNumericField Label="Points" @bind-Value="rule.Value" 
+                                            <MudNumericField Label="Points" @bind-Value="rule.Value"
                                                              Variant="Variant.Outlined" Margin="Margin.Dense" Format="0.####" />
                                         </MudItem>
-                                        <MudItem xs="6" sm="2">
-                                            <MudNumericField Label="Threshold" @bind-Value="rule.Threshold" 
-                                                             Variant="Variant.Outlined" Margin="Margin.Dense"
-                                                             Disabled="@(!IsThresholdRule(rule.Type))" />
-                                        </MudItem>
                                         <MudItem xs="12" sm="4">
-                                            @if (IsMedalRule(rule.Type))
+                                            @if (rule.Type == ScoringRuleType.MedalMultiplier)
                                             {
-                                                <MudTextField Label="Medal Type" @bind-Value="rule.MedalType" 
-                                                              Placeholder="e.g. Excellent" 
+                                                <MudTextField Label="Medal Type" @bind-Value="rule.MedalType"
+                                                              Placeholder="e.g. Excellent"
                                                               Variant="Variant.Outlined" Margin="Margin.Dense" />
                                             }
                                             else
                                             {
-                                                <MudTextField Label="Game Type Filter" @bind-Value="rule.GameTypeFilter" 
-                                                              Placeholder="All types" 
+                                                <MudTextField Label="Game Type Filter" @bind-Value="rule.GameTypeFilter"
+                                                              Placeholder="All types"
                                                               Variant="Variant.Outlined" Margin="Margin.Dense" />
                                             }
                                         </MudItem>
@@ -134,6 +137,7 @@
     private MudForm? _form;
     private bool _isValid;
     private MudDropContainer<ScoringRule>? _dropContainer;
+    private int _matchCount = -1;
 
     protected override async Task OnInitializedAsync()
     {
@@ -150,6 +154,14 @@
             _rules = s.Rules.OrderBy(r => r.SortOrder).ToList();
             _startDate = s.StartDate.ToDateTime(TimeOnly.MinValue);
             _endDate = s.EndDate?.ToDateTime(TimeOnly.MinValue);
+
+            var startDt = DateTime.SpecifyKind(s.StartDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
+            var endDt = s.EndDate.HasValue
+                ? DateTime.SpecifyKind(s.EndDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc)
+                : DateTime.MaxValue;
+            _matchCount = await Db.Matches
+                .Where(m => m.StartedAt >= startDt && m.StartedAt < endDt && m.FinishedAt != null)
+                .CountAsync();
         }
         else
         {
@@ -173,11 +185,11 @@
             {
                 _rules = new List<ScoringRule>
                 {
-                    new() { Type = ScoringRuleType.KillsMultiplier, Value = 1, SortOrder = 0 },
-                    new() { Type = ScoringRuleType.DeathsMultiplier, Value = -0.5m, SortOrder = 1 },
-                    new() { Type = ScoringRuleType.WinsBonus, Value = 5, SortOrder = 2 },
-                    new() { Type = ScoringRuleType.RoundsWonMultiplier, Value = 0.5m, SortOrder = 3 },
-                    new() { Type = ScoringRuleType.DamageMultiplier, Value = 0.01m, SortOrder = 4 }
+                    new() { Type = ScoringRuleType.KillsMultiplier,    Value = 1,      SortOrder = 0 },
+                    new() { Type = ScoringRuleType.SuicidesMultiplier, Value = -1,     SortOrder = 1 },
+                    new() { Type = ScoringRuleType.WinMultiplier,      Value = 5,      SortOrder = 2 },
+                    new() { Type = ScoringRuleType.RoundsWonMultiplier,Value = 0.5m,   SortOrder = 3 },
+                    new() { Type = ScoringRuleType.DamageMultiplier,   Value = 0.01m,  SortOrder = 4 }
                 };
             }
         }
@@ -222,23 +234,14 @@
 
     private string GetRuleLabel(ScoringRuleType type) => type switch
     {
-        ScoringRuleType.KillsMultiplier => "Kills Multiplier",
-        ScoringRuleType.DeathsMultiplier => "Deaths Multiplier",
-        ScoringRuleType.DamageMultiplier => "Damage Multiplier",
-        ScoringRuleType.WinsBonus => "Win Bonus",
-        ScoringRuleType.LossesBonus => "Loss Bonus",
+        ScoringRuleType.KillsMultiplier     => "Kills Multiplier",
+        ScoringRuleType.SuicidesMultiplier  => "Suicides Multiplier",
+        ScoringRuleType.DamageMultiplier    => "Damage Multiplier",
+        ScoringRuleType.WinMultiplier       => "Win Bonus",
         ScoringRuleType.RoundsWonMultiplier => "Rounds Won Multiplier",
-        ScoringRuleType.RoundsLostMultiplier => "Rounds Lost Multiplier",
-        ScoringRuleType.DamageThresholdBonus => "Damage Threshold Bonus",
-        ScoringRuleType.KillsThresholdBonus => "Kills Threshold Bonus",
-        ScoringRuleType.MedalMultiplier => "Medal Multiplier",
-        _ => type.ToString()
+        ScoringRuleType.MedalMultiplier     => "Medal Multiplier",
+        _                                   => type.ToString()
     };
-
-    private bool IsThresholdRule(ScoringRuleType type) =>
-        type == ScoringRuleType.DamageThresholdBonus || type == ScoringRuleType.KillsThresholdBonus;
-
-    private bool IsMedalRule(ScoringRuleType type) => type == ScoringRuleType.MedalMultiplier;
 
     private async Task SaveAsync()
     {
@@ -282,6 +285,15 @@
                     });
                 }
             }
+        }
+
+        if (_season.IsActive)
+        {
+            var others = await Db.Seasons
+                .Where(s => s.IsActive && s.Id != Id)
+                .ToListAsync();
+            foreach (var other in others)
+                other.IsActive = false;
         }
 
         await Db.SaveChangesAsync();

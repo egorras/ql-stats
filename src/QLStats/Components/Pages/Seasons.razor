@@ -18,6 +18,7 @@
         <MudTh>Start</MudTh>
         <MudTh>End</MudTh>
         <MudTh>Active</MudTh>
+        <MudTh>Matches</MudTh>
         <MudTh>Actions</MudTh>
     </HeaderContent>
     <RowTemplate>
@@ -32,6 +33,7 @@
                 <MudChip T="string" Color="Color.Success" Size="Size.Small">Active</MudChip>
             }
         </MudTd>
+        <MudTd>@(_matchCounts.GetValueOrDefault(context.Id))</MudTd>
         <MudTd>
             <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                 OnClick="@(() => Nav.NavigateTo($"/seasons/{context.Id}/edit"))" />
@@ -41,6 +43,7 @@
 
 @code {
     private List<Season> _seasons = [];
+    private Dictionary<int, int> _matchCounts = [];
     private bool _loading = true;
 
     protected override async Task OnInitializedAsync()
@@ -51,6 +54,21 @@
     private async Task LoadAsync()
     {
         _seasons = await Db.Seasons.Include(s => s.Rules).OrderByDescending(s => s.IsActive).ThenByDescending(s => s.StartDate).ToListAsync();
+
+        var allMatchDates = await Db.Matches
+            .Where(m => m.FinishedAt != null)
+            .Select(m => m.StartedAt)
+            .ToListAsync();
+
+        foreach (var s in _seasons)
+        {
+            var start = s.StartDate.ToDateTime(TimeOnly.MinValue);
+            var end = s.EndDate.HasValue
+                ? s.EndDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue)
+                : DateTime.MaxValue;
+            _matchCounts[s.Id] = allMatchDates.Count(d => d >= start && d < end);
+        }
+
         _loading = false;
     }
 }

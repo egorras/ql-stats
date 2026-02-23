@@ -7,7 +7,7 @@ namespace QLStats.Tests.Scoring;
 public class ScoringEngineTests
 {
     private static MatchPlayer MakePlayer(
-        int kills = 0, int deaths = 0, int damageDealt = 0,
+        int kills = 0, int suicides = 0, int damageDealt = 0,
         bool won = false, string gameType = "CA",
         Dictionary<string, int>? medals = null)
     {
@@ -15,7 +15,7 @@ public class ScoringEngineTests
         return new MatchPlayer
         {
             Kills = kills,
-            Deaths = deaths,
+            Suicides = suicides,
             DamageDealt = damageDealt,
             Won = won,
             Medals = medals ?? new Dictionary<string, int>(),
@@ -38,12 +38,11 @@ public class ScoringEngineTests
     }
 
     private static ScoringRule Rule(ScoringRuleType type, decimal value,
-        decimal? threshold = null, string? gameTypeFilter = null, string? medalType = null) =>
+        string? gameTypeFilter = null, string? medalType = null) =>
         new()
         {
             Type = type,
             Value = value,
-            Threshold = threshold,
             GameTypeFilter = gameTypeFilter,
             MedalType = medalType
         };
@@ -53,11 +52,11 @@ public class ScoringEngineTests
     [Fact]
     public void CalculatePoints_SumsMultipleRulesCorrectly()
     {
-        var mp = MakePlayer(kills: 10, deaths: 4, won: true);
+        var mp = MakePlayer(kills: 10, suicides: 4, won: true);
         var season = MakeSeason(
-            Rule(ScoringRuleType.KillsMultiplier, 2m),   // 20
-            Rule(ScoringRuleType.DeathsMultiplier, -1m), // -4
-            Rule(ScoringRuleType.WinsBonus, 50m)          // 50
+            Rule(ScoringRuleType.KillsMultiplier,    2m),   // 20
+            Rule(ScoringRuleType.SuicidesMultiplier, -1m),  // -4
+            Rule(ScoringRuleType.WinMultiplier,      50m)   // 50
         );
 
         var total = ScoringEngine.CalculatePoints(mp, season);
@@ -77,7 +76,6 @@ public class ScoringEngineTests
     [Fact]
     public void CalculatePoints_RespectsRuleOrder()
     {
-        // All rules produce the same value; test that total = sum of all
         var mp = MakePlayer(kills: 5);
         var season = MakeSeason(
             Rule(ScoringRuleType.KillsMultiplier, 1m),
@@ -97,7 +95,7 @@ public class ScoringEngineTests
         var mp = MakePlayer(kills: 8, won: true);
         var season = MakeSeason(
             Rule(ScoringRuleType.KillsMultiplier, 2m),
-            Rule(ScoringRuleType.WinsBonus, 50m)
+            Rule(ScoringRuleType.WinMultiplier,   50m)
         );
 
         var (total, breakdown) = ScoringEngine.CalculatePointsWithBreakdown(mp, season);
@@ -112,7 +110,7 @@ public class ScoringEngineTests
         var mp = MakePlayer(kills: 5, won: false);
         var season = MakeSeason(
             Rule(ScoringRuleType.KillsMultiplier, 2m),  // 10 — included
-            Rule(ScoringRuleType.WinsBonus, 50m)          // 0  — excluded
+            Rule(ScoringRuleType.WinMultiplier,   50m)  //  0 — excluded
         );
 
         var (total, breakdown) = ScoringEngine.CalculatePointsWithBreakdown(mp, season);
@@ -125,7 +123,6 @@ public class ScoringEngineTests
     [Fact]
     public void CalculatePointsWithBreakdown_DuplicateDescriptions_MergedBySumming()
     {
-        // Two identical KillsMultiplier rules with same value → same description key
         var mp = MakePlayer(kills: 4);
         var ruleA = Rule(ScoringRuleType.KillsMultiplier, 1m);
         var ruleB = Rule(ScoringRuleType.KillsMultiplier, 1m);
@@ -135,7 +132,6 @@ public class ScoringEngineTests
 
         // 4*1 + 4*1 = 8
         Assert.Equal(8m, total);
-        // Both rules share the same description → merged into one key
         Assert.Single(breakdown);
         Assert.Equal(8m, breakdown.Values.First());
     }
@@ -146,7 +142,7 @@ public class ScoringEngineTests
         var mp = MakePlayer(kills: 0, won: false);
         var season = MakeSeason(
             Rule(ScoringRuleType.KillsMultiplier, 2m),
-            Rule(ScoringRuleType.WinsBonus, 50m)
+            Rule(ScoringRuleType.WinMultiplier,   50m)
         );
 
         var (total, breakdown) = ScoringEngine.CalculatePointsWithBreakdown(mp, season);
@@ -158,12 +154,12 @@ public class ScoringEngineTests
     [Fact]
     public void CalculatePointsWithBreakdown_BreakdownTotalMatchesCalculatePoints()
     {
-        var mp = MakePlayer(kills: 6, deaths: 2, damageDealt: 3000, won: true);
+        var mp = MakePlayer(kills: 6, suicides: 2, damageDealt: 3000, won: true);
         var season = MakeSeason(
-            Rule(ScoringRuleType.KillsMultiplier, 2m),
-            Rule(ScoringRuleType.DeathsMultiplier, -1m),
-            Rule(ScoringRuleType.WinsBonus, 100m),
-            Rule(ScoringRuleType.DamageThresholdBonus, 25m, threshold: 2000m)
+            Rule(ScoringRuleType.KillsMultiplier,    2m),
+            Rule(ScoringRuleType.SuicidesMultiplier, -1m),
+            Rule(ScoringRuleType.WinMultiplier,      100m),
+            Rule(ScoringRuleType.DamageMultiplier,   0.01m)
         );
 
         var simple = ScoringEngine.CalculatePoints(mp, season);

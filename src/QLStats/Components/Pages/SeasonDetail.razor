@@ -1,9 +1,11 @@
 @page "/seasons/{SeasonId:int}"
 @rendermode InteractiveServer
 @using QLStats.Data
+@using QLStats.Data.Entities
 @using QLStats.Services
 @inject AppDbContext Db
 @inject StandingsService StandingsService
+@inject DuoAnalyticsService DuoService
 @inject NavigationManager Nav
 
 <PageTitle>Season — QL Stats</PageTitle>
@@ -21,7 +23,7 @@ else
                 @_season.StartDate — @(_season.EndDate?.ToString() ?? "ongoing")
             </MudText>
         </div>
-        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" 
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit"
                    OnClick="@(() => Nav.NavigateTo($"/seasons/{SeasonId}/edit"))">Edit Season</MudButton>
     </div>
 
@@ -37,46 +39,157 @@ else
         </MudGrid>
     </MudPaper>
 
-    <MudText Typo="Typo.h6" Class="mb-2">Standings</MudText>
-    @if (_standings.Count == 0)
-    {
-        <MudAlert Severity="Severity.Info">No matches recorded for this season yet.</MudAlert>
-    }
-    else
-    {
-        <MudTable Items="_standings" Dense="true" Hover="true">
-            <HeaderContent>
-                <MudTh>#</MudTh>
-                <MudTh>Player</MudTh>
-                <MudTh>Points</MudTh>
-                <MudTh>W</MudTh>
-                <MudTh>L</MudTh>
-                <MudTh>Matches</MudTh>
-                <MudTh>K</MudTh>
-                <MudTh>D</MudTh>
-                <MudTh>K/D</MudTh>
-                <MudTh>Dmg</MudTh>
-                <MudTh>Breakdown</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd>@(_standings.IndexOf(context) + 1)</MudTd>
-                <MudTd><strong>@context.DisplayName</strong></MudTd>
-                <MudTd><strong>@context.TotalPoints.ToString("0.##")</strong></MudTd>
-                <MudTd>@context.Wins</MudTd>
-                <MudTd>@context.Losses</MudTd>
-                <MudTd>@context.MatchesPlayed</MudTd>
-                <MudTd>@context.Kills</MudTd>
-                <MudTd>@context.Deaths</MudTd>
-                <MudTd>@(context.Deaths == 0 ? context.Kills.ToString() : ((double)context.Kills / context.Deaths).ToString("0.##"))</MudTd>
-                <MudTd>@context.DamageDealt.ToString("N0")</MudTd>
-                <MudTd>
-                    <MudTooltip Text="@GetBreakdownTooltip(context)">
-                        <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" />
-                    </MudTooltip>
-                </MudTd>
-            </RowTemplate>
-        </MudTable>
-    }
+    <MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true">
+        <MudTabPanel Text="Standings">
+            @if (_standings.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info">No matches recorded for this season yet.</MudAlert>
+            }
+            else
+            {
+                <MudTable Items="_standings" Dense="true" Hover="true">
+                    <HeaderContent>
+                        <MudTh>#</MudTh>
+                        <MudTh>Player</MudTh>
+                        <MudTh>Points</MudTh>
+                        <MudTh>W</MudTh>
+                        <MudTh>L</MudTh>
+                        <MudTh>Matches</MudTh>
+                        <MudTh>K</MudTh>
+                        <MudTh>D</MudTh>
+                        <MudTh>K/D</MudTh>
+                        <MudTh>Dmg</MudTh>
+                        <MudTh>Breakdown</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@(_standings.IndexOf(context) + 1)</MudTd>
+                        <MudTd><strong>@context.DisplayName</strong></MudTd>
+                        <MudTd><strong>@context.TotalPoints.ToString("0.##")</strong></MudTd>
+                        <MudTd>@context.Wins</MudTd>
+                        <MudTd>@context.Losses</MudTd>
+                        <MudTd>@context.MatchesPlayed</MudTd>
+                        <MudTd>@context.Kills</MudTd>
+                        <MudTd>@context.Deaths</MudTd>
+                        <MudTd>@(context.Deaths == 0 ? context.Kills.ToString() : ((double)context.Kills / context.Deaths).ToString("0.##"))</MudTd>
+                        <MudTd>@context.DamageDealt.ToString("N0")</MudTd>
+                        <MudTd>
+                            <MudTooltip Text="@GetBreakdownTooltip(context)">
+                                <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" />
+                            </MudTooltip>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudTabPanel>
+
+        <MudTabPanel Text="Points History" OnClick="LoadPointsHistory">
+            @if (_pointsHistoryLoaded && _pointsHistory.Count > 0)
+            {
+                <MudTable Items="_pointsHistory" Dense="true" Hover="true" Class="mt-2">
+                    <HeaderContent>
+                        <MudTh>Date</MudTh>
+                        <MudTh>Map</MudTh>
+                        @foreach (var name in _pointsHistoryPlayers)
+                        {
+                            <MudTh>@name</MudTh>
+                        }
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.Date</MudTd>
+                        <MudTd>@context.Map</MudTd>
+                        @foreach (var name in _pointsHistoryPlayers)
+                        {
+                            <MudTd>@(context.CumulativePoints.TryGetValue(name, out var v) ? v.ToString("0.##") : "—")</MudTd>
+                        }
+                    </RowTemplate>
+                </MudTable>
+            }
+            else if (_pointsHistoryLoaded)
+            {
+                <MudAlert Severity="Severity.Info">Not enough match data yet.</MudAlert>
+            }
+            else
+            {
+                <MudProgressCircular Indeterminate="true" />
+            }
+        </MudTabPanel>
+
+        <MudTabPanel Text="Top Duos" OnClick="LoadDuos">
+            @if (_duosLoaded && _duos.Count > 0)
+            {
+                <MudTable Items="_duos" Dense="true" Hover="true" Class="mt-2">
+                    <HeaderContent>
+                        <MudTh>#</MudTh>
+                        <MudTh>Player 1</MudTh>
+                        <MudTh>Player 2</MudTh>
+                        <MudTh>Matches</MudTh>
+                        <MudTh>Wins</MudTh>
+                        <MudTh>Win Rate</MudTh>
+                        <MudTh>Avg Kills</MudTh>
+                        <MudTh>Avg Damage</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@(_duos.IndexOf(context) + 1)</MudTd>
+                        <MudTd>@context.Player1Name</MudTd>
+                        <MudTd>@context.Player2Name</MudTd>
+                        <MudTd>@context.MatchesPlayed</MudTd>
+                        <MudTd>@context.Wins</MudTd>
+                        <MudTd>@context.WinRate%</MudTd>
+                        <MudTd>@context.AvgKillsPerMatch</MudTd>
+                        <MudTd>@context.AvgDamagePerMatch.ToString("N0")</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+            else if (_duosLoaded)
+            {
+                <MudAlert Severity="Severity.Info" Class="mt-2">No duo data for this season yet.</MudAlert>
+            }
+            else
+            {
+                <MudProgressCircular Indeterminate="true" />
+            }
+        </MudTabPanel>
+
+        <MudTabPanel Text="Weapon Performance" OnClick="LoadWeaponStats">
+            @if (_weaponStatsLoaded && _weaponRows.Count > 0)
+            {
+                <MudTable Items="_weaponRows" Dense="true" Hover="true" Class="mt-2">
+                    <HeaderContent>
+                        <MudTh>Player</MudTh>
+                        <MudTh>Top Weapon</MudTh>
+                        <MudTh>Kills</MudTh>
+                        <MudTh>All Weapons</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.DisplayName</MudTd>
+                        <MudTd>@context.TopWeapon</MudTd>
+                        <MudTd>@context.TopWeaponKills</MudTd>
+                        <MudTd>
+                            <MudTooltip>
+                                <TooltipContent>
+                                    @foreach (var kv in context.AllWeapons)
+                                    {
+                                        <div>@kv.Key: @kv.Value</div>
+                                    }
+                                </TooltipContent>
+                                <ChildContent>
+                                    <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" />
+                                </ChildContent>
+                            </MudTooltip>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+            else if (_weaponStatsLoaded)
+            {
+                <MudAlert Severity="Severity.Info" Class="mt-2">No weapon data recorded for this season yet.</MudAlert>
+            }
+            else
+            {
+                <MudProgressCircular Indeterminate="true" />
+            }
+        </MudTabPanel>
+    </MudTabs>
 }
 
 @code {
@@ -84,6 +197,21 @@ else
 
     private QLStats.Data.Entities.Season? _season;
     private List<PlayerStanding> _standings = [];
+
+    // Points history tab
+    private bool _pointsHistoryLoaded;
+    private record PointsHistoryRow(string Date, string Map, Dictionary<string, decimal> CumulativePoints);
+    private List<PointsHistoryRow> _pointsHistory = [];
+    private List<string> _pointsHistoryPlayers = [];
+
+    // Duos tab
+    private bool _duosLoaded;
+    private List<DuoStats> _duos = [];
+
+    // Weapon performance tab
+    private bool _weaponStatsLoaded;
+    private record WeaponRow(string DisplayName, string TopWeapon, int TopWeaponKills, Dictionary<string, int> AllWeapons);
+    private List<WeaponRow> _weaponRows = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -93,6 +221,112 @@ else
             try { _standings = await StandingsService.GetSeasonStandingsAsync(SeasonId); }
             catch { _standings = []; }
         }
+    }
+
+    private async Task LoadPointsHistory()
+    {
+        if (_pointsHistoryLoaded) return;
+
+        var startDt = DateTime.SpecifyKind(_season!.StartDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
+        var endDt = _season.EndDate.HasValue
+            ? DateTime.SpecifyKind(_season.EndDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc)
+            : DateTime.MaxValue;
+
+        var matchPlayers = await Db.MatchPlayers
+            .Include(mp => mp.Player)
+            .Include(mp => mp.Match)
+            .Where(mp => mp.Match.StartedAt >= startDt && mp.Match.StartedAt < endDt
+                         && mp.Match.FinishedAt != null)
+            .OrderBy(mp => mp.Match.StartedAt)
+            .ToListAsync();
+
+        if (matchPlayers.Count == 0)
+        {
+            _pointsHistoryLoaded = true;
+            return;
+        }
+
+        var top5 = _standings.Take(5).ToList();
+        _pointsHistoryPlayers = top5.Select(s => s.DisplayName).ToList();
+
+        // Cumulative points per player, emitted per match (by match start date + map)
+        var cumulative = top5.ToDictionary(s => s.DisplayName, _ => (decimal)0);
+
+        var byMatch = matchPlayers
+            .GroupBy(mp => new { mp.MatchId, mp.Match.StartedAt, mp.Match.Map })
+            .OrderBy(g => g.Key.StartedAt);
+
+        foreach (var g in byMatch)
+        {
+            foreach (var mp in g)
+            {
+                var name = top5.FirstOrDefault(s => s.PlayerId == mp.PlayerId)?.DisplayName;
+                if (name is null) continue;
+                var (pts, _) = ScoringEngine.CalculatePointsWithBreakdown(mp, _season);
+                cumulative[name] += pts;
+            }
+
+            _pointsHistory.Add(new PointsHistoryRow(
+                Date: g.Key.StartedAt.ToString("MM/dd HH:mm"),
+                Map: g.Key.Map,
+                CumulativePoints: new Dictionary<string, decimal>(cumulative)
+            ));
+        }
+
+        _pointsHistoryLoaded = true;
+    }
+
+    private async Task LoadDuos()
+    {
+        if (_duosLoaded) return;
+        try { _duos = await DuoService.GetDuoStatsAsync(seasonId: SeasonId); }
+        catch { _duos = []; }
+        _duosLoaded = true;
+    }
+
+    private async Task LoadWeaponStats()
+    {
+        if (_weaponStatsLoaded) return;
+
+        var startDt = DateTime.SpecifyKind(_season!.StartDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
+        var endDt = _season.EndDate.HasValue
+            ? DateTime.SpecifyKind(_season.EndDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc)
+            : DateTime.MaxValue;
+
+        var matchPlayers = await Db.MatchPlayers
+            .Include(mp => mp.Player)
+            .Include(mp => mp.Match)
+            .Where(mp => mp.Match.StartedAt >= startDt && mp.Match.StartedAt < endDt
+                         && mp.Match.FinishedAt != null
+                         && mp.Weapons != null)
+            .ToListAsync();
+
+        _weaponRows = matchPlayers
+            .GroupBy(mp => new { mp.PlayerId, mp.Player.DisplayName })
+            .Select(g =>
+            {
+                var allWeapons = g
+                    .SelectMany(mp => mp.Weapons)
+                    .GroupBy(kv => kv.Key)
+                    .ToDictionary(wg => wg.Key, wg => wg.Sum(kv => kv.Value));
+
+                if (allWeapons.Count == 0)
+                    return null;
+
+                var top = allWeapons.MaxBy(kv => kv.Value);
+                return new WeaponRow(
+                    DisplayName: g.Key.DisplayName,
+                    TopWeapon: top.Key,
+                    TopWeaponKills: top.Value,
+                    AllWeapons: allWeapons.OrderByDescending(kv => kv.Value).ToDictionary(kv => kv.Key, kv => kv.Value)
+                );
+            })
+            .Where(r => r is not null)
+            .Select(r => r!)
+            .OrderByDescending(r => r.TopWeaponKills)
+            .ToList();
+
+        _weaponStatsLoaded = true;
     }
 
     private string GetBreakdownTooltip(PlayerStanding s)

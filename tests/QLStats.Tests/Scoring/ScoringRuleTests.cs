@@ -5,9 +5,8 @@ namespace QLStats.Tests.Scoring;
 
 public class ScoringRuleTests
 {
-    // Helper: build a MatchPlayer with required navigation property
     private static MatchPlayer MakePlayer(
-        int kills = 0, int deaths = 0,
+        int kills = 0, int deaths = 0, int suicides = 0,
         int damageDealt = 0, int damageTaken = 0,
         bool won = false,
         int roundsWon = 0, int roundsLost = 0,
@@ -20,6 +19,7 @@ public class ScoringRuleTests
         {
             Kills = kills,
             Deaths = deaths,
+            Suicides = suicides,
             DamageDealt = damageDealt,
             DamageTaken = damageTaken,
             Won = won,
@@ -32,12 +32,11 @@ public class ScoringRuleTests
     }
 
     private static ScoringRule Rule(ScoringRuleType type, decimal value,
-        decimal? threshold = null, string? gameTypeFilter = null, string? medalType = null) =>
+        string? gameTypeFilter = null, string? medalType = null) =>
         new()
         {
             Type = type,
             Value = value,
-            Threshold = threshold,
             GameTypeFilter = gameTypeFilter,
             MedalType = medalType,
             SeasonId = 1,
@@ -64,104 +63,66 @@ public class ScoringRuleTests
         Assert.Equal(0m, rule.Calculate(mp));
     }
 
-    // ── DeathsMultiplier ──────────────────────────────────────────────────────
+    // ── SuicidesMultiplier ────────────────────────────────────────────────────
 
     [Fact]
-    public void DeathsMultiplier_ReturnsDeathsTimesValue()
+    public void SuicidesMultiplier_ReturnsSuicidesTimesValue()
     {
-        var mp = MakePlayer(deaths: 5);
-        var rule = Rule(ScoringRuleType.DeathsMultiplier, -1m);
+        var mp = MakePlayer(suicides: 5);
+        var rule = Rule(ScoringRuleType.SuicidesMultiplier, -1m);
 
         Assert.Equal(-5m, rule.Calculate(mp));
     }
 
-    // ── WinsBonus ─────────────────────────────────────────────────────────────
+    [Fact]
+    public void SuicidesMultiplier_ZeroSuicides_ReturnsZero()
+    {
+        var mp = MakePlayer(suicides: 0);
+        var rule = Rule(ScoringRuleType.SuicidesMultiplier, -2m);
+
+        Assert.Equal(0m, rule.Calculate(mp));
+    }
+
+    // ── WinMultiplier ─────────────────────────────────────────────────────────
 
     [Fact]
-    public void WinsBonus_Won_ReturnsValue()
+    public void WinMultiplier_Won_ReturnsValue()
     {
         var mp = MakePlayer(won: true);
-        var rule = Rule(ScoringRuleType.WinsBonus, 50m);
+        var rule = Rule(ScoringRuleType.WinMultiplier, 50m);
 
         Assert.Equal(50m, rule.Calculate(mp));
     }
 
     [Fact]
-    public void WinsBonus_Lost_ReturnsZero()
+    public void WinMultiplier_Lost_ReturnsZero()
     {
         var mp = MakePlayer(won: false);
-        var rule = Rule(ScoringRuleType.WinsBonus, 50m);
+        var rule = Rule(ScoringRuleType.WinMultiplier, 50m);
 
         Assert.Equal(0m, rule.Calculate(mp));
     }
 
-    // ── LossesBonus ───────────────────────────────────────────────────────────
+    // ── DamageMultiplier ──────────────────────────────────────────────────────
 
     [Fact]
-    public void LossesBonus_Lost_ReturnsValue()
+    public void DamageMultiplier_ReturnsDamageTimesValueFloored()
     {
-        var mp = MakePlayer(won: false);
-        var rule = Rule(ScoringRuleType.LossesBonus, 10m);
-
-        Assert.Equal(10m, rule.Calculate(mp));
-    }
-
-    [Fact]
-    public void LossesBonus_Won_ReturnsZero()
-    {
-        var mp = MakePlayer(won: true);
-        var rule = Rule(ScoringRuleType.LossesBonus, 10m);
-
-        Assert.Equal(0m, rule.Calculate(mp));
-    }
-
-    // ── DamageThresholdBonus ──────────────────────────────────────────────────
-
-    [Fact]
-    public void DamageThresholdBonus_Above_ReturnsValue()
-    {
-        var mp = MakePlayer(damageDealt: 5000);
-        var rule = Rule(ScoringRuleType.DamageThresholdBonus, 25m, threshold: 4000m);
-
-        Assert.Equal(25m, rule.Calculate(mp));
-    }
-
-    [Fact]
-    public void DamageThresholdBonus_Equal_ReturnsValue()
-    {
-        var mp = MakePlayer(damageDealt: 4000);
-        var rule = Rule(ScoringRuleType.DamageThresholdBonus, 25m, threshold: 4000m);
-
-        Assert.Equal(25m, rule.Calculate(mp));
-    }
-
-    [Fact]
-    public void DamageThresholdBonus_Below_ReturnsZero()
-    {
-        var mp = MakePlayer(damageDealt: 999);
-        var rule = Rule(ScoringRuleType.DamageThresholdBonus, 25m, threshold: 4000m);
-
-        Assert.Equal(0m, rule.Calculate(mp));
-    }
-
-    // ── KillsThresholdBonus ───────────────────────────────────────────────────
-
-    [Fact]
-    public void KillsThresholdBonus_Above_ReturnsValue()
-    {
-        var mp = MakePlayer(kills: 20);
-        var rule = Rule(ScoringRuleType.KillsThresholdBonus, 30m, threshold: 15m);
+        var mp = MakePlayer(damageDealt: 3000);
+        var rule = Rule(ScoringRuleType.DamageMultiplier, 0.01m);
 
         Assert.Equal(30m, rule.Calculate(mp));
     }
 
     [Fact]
-    public void KillsThresholdBonus_Below_ReturnsZero()
+    public void DamageMultiplier_LegacyRate_FloorsDivision()
     {
-        var mp = MakePlayer(kills: 5);
-        var rule = Rule(ScoringRuleType.KillsThresholdBonus, 30m, threshold: 15m);
+        // floor(299 / 150) = 1, floor(300 / 150) = 2
+        var rule = Rule(ScoringRuleType.DamageMultiplier, 1m / 150m);
 
-        Assert.Equal(0m, rule.Calculate(mp));
+        Assert.Equal(1m, rule.Calculate(MakePlayer(damageDealt: 299)));
+        Assert.Equal(2m, rule.Calculate(MakePlayer(damageDealt: 300)));
+        Assert.Equal(0m, rule.Calculate(MakePlayer(damageDealt: 149)));
     }
 
     // ── MedalMultiplier ───────────────────────────────────────────────────────
@@ -180,6 +141,29 @@ public class ScoringRuleTests
     {
         var mp = MakePlayer(medals: new Dictionary<string, int>());
         var rule = Rule(ScoringRuleType.MedalMultiplier, 5m, medalType: "Impressive");
+
+        Assert.Equal(0m, rule.Calculate(mp));
+    }
+
+    [Fact]
+    public void MedalMultiplier_NullMedalType_SumsAllMedals()
+    {
+        var mp = MakePlayer(medals: new Dictionary<string, int>
+        {
+            ["Excellent"] = 2,
+            ["Impressive"] = 3,
+            ["Headhunter"] = 1
+        });
+        var rule = Rule(ScoringRuleType.MedalMultiplier, 1m, medalType: null);
+
+        Assert.Equal(6m, rule.Calculate(mp));
+    }
+
+    [Fact]
+    public void MedalMultiplier_NullMedalType_NoMedals_ReturnsZero()
+    {
+        var mp = MakePlayer(medals: new Dictionary<string, int>());
+        var rule = Rule(ScoringRuleType.MedalMultiplier, 1m, medalType: null);
 
         Assert.Equal(0m, rule.Calculate(mp));
     }
@@ -213,7 +197,7 @@ public class ScoringRuleTests
         Assert.Equal(21m, rule.Calculate(mp));
     }
 
-    // ── RoundsWon / RoundsLost multipliers ───────────────────────────────────
+    // ── RoundsWonMultiplier ───────────────────────────────────────────────────
 
     [Fact]
     public void RoundsWonMultiplier_ReturnsRoundsWonTimesValue()
@@ -222,14 +206,5 @@ public class ScoringRuleTests
         var rule = Rule(ScoringRuleType.RoundsWonMultiplier, 4m);
 
         Assert.Equal(24m, rule.Calculate(mp));
-    }
-
-    [Fact]
-    public void RoundsLostMultiplier_ReturnsRoundsLostTimesValue()
-    {
-        var mp = MakePlayer(roundsLost: 3);
-        var rule = Rule(ScoringRuleType.RoundsLostMultiplier, -2m);
-
-        Assert.Equal(-6m, rule.Calculate(mp));
     }
 }

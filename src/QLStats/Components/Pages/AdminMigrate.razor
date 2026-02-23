@@ -1,0 +1,157 @@
+@page "/admin/migrate"
+@rendermode InteractiveServer
+@using QLStats.Services
+@inject LegacyMigrationService MigrationService
+@inject EventReplayService ReplayService
+@inject ISnackbar Snackbar
+@inject LiveMatchState LiveMatch
+
+<PageTitle>Legacy Migration — QL Stats</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Legacy Migration</MudText>
+
+@if (LiveMatch.Current is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4">
+        A match is currently in progress. Migration and replay are disabled to prevent data corruption.
+    </MudAlert>
+}
+else
+{
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudCard>
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Reset All Data</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3">
+                        Deletes <strong>everything</strong>: matches, seasons, players, and all events.
+                        Live ZMQ server configs are preserved.
+                    </MudAlert>
+                    <MudText>Use this before a fresh import to start from a clean slate.</MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Error" OnClick="ResetAsync"
+                        Disabled="_running">
+                        @if (_running) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                        Reset All Data
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudCard>
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Import Legacy Data</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText>
+                        Reads seasons and match events from the legacy Neon.tech PostgreSQL database and imports them
+                        into the local <code>ZmqEvents</code> table under a <code>legacy://quake-stats</code> server entry.
+                        Re-running is safe — existing legacy events are deleted and re-imported.
+                    </MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="ImportAsync"
+                        Disabled="_running">
+                        @if (_running) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                        Import from Legacy DB
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudCard>
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">After Import — Full Rebuild</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+                        This will <strong>delete all</strong> match/session/standings data and rebuild from the event log.
+                    </MudAlert>
+                    <MudText>
+                        Once legacy events are imported, run a full rebuild to process them through the ingestion
+                        pipeline. Scoring rules must be configured on each season separately.
+                    </MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Error" OnClick="RebuildAsync"
+                        Disabled="_running">
+                        @if (_running) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                        Full Rebuild
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    @if (_lastResult is not null)
+    {
+        <MudAlert Severity="Severity.Success" Class="mt-4">@_lastResult</MudAlert>
+    }
+}
+
+@code {
+    private bool _running;
+    private string? _lastResult;
+
+    private async Task ResetAsync()
+    {
+        _running = true;
+        _lastResult = null;
+        try
+        {
+            await MigrationService.ResetAllAsync();
+            _lastResult = "Reset complete: all data cleared.";
+            Snackbar.Add(_lastResult, Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Reset failed: {ex.Message}", Severity.Error);
+        }
+        finally { _running = false; }
+    }
+
+    private async Task ImportAsync()
+    {
+        _running = true;
+        _lastResult = null;
+        try
+        {
+            var result = await MigrationService.MigrateAsync();
+            _lastResult = $"Import complete: {result.SeasonsImported} seasons imported, {result.SeasonsSkipped} skipped, {result.EventsImported} events imported.";
+            Snackbar.Add(_lastResult, Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Import failed: {ex.Message}", Severity.Error);
+        }
+        finally { _running = false; }
+    }
+
+    private async Task RebuildAsync()
+    {
+        _running = true;
+        _lastResult = null;
+        try
+        {
+            var count = await ReplayService.ReplayAllAsync();
+            _lastResult = $"Full rebuild complete: {count} events processed.";
+            Snackbar.Add(_lastResult, Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Rebuild failed: {ex.Message}", Severity.Error);
+        }
+        finally { _running = false; }
+    }
+}

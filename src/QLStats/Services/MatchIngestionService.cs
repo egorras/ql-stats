@@ -9,15 +9,17 @@ namespace QLStats.Services;
 public class MatchIngestionService(
     IDbContextFactory<AppDbContext> dbFactory,
     LiveMatchState liveMatch,
+    StandingsNotifier standingsNotifier,
+    StandingsService standingsService,
     ILogger<MatchIngestionService> logger)
 {
     private const int InterRoundWindowSeconds = 11;
     private readonly ConcurrentDictionary<string, int> _roundEndTimes = new();
 
-    public Task HandleAsync(QlEvent @event, int serverId) => @event switch
+    public Task HandleAsync(QlEvent @event, int serverId, DateTime? eventTime = null) => @event switch
     {
-        MatchStartedData e  => HandleMatchStartedAsync(e, serverId),
-        MatchReportData e   => HandleMatchReportAsync(e, serverId),
+        MatchStartedData e  => HandleMatchStartedAsync(e, serverId, eventTime),
+        MatchReportData e   => HandleMatchReportAsync(e, serverId, eventTime),
         PlayerKillData e    => HandlePlayerKillAsync(e),
         RoundOverData e     => HandleRoundOverAsync(e),
         PlayerStatsData e   => HandlePlayerStatsAsync(e),
@@ -26,7 +28,7 @@ public class MatchIngestionService(
         _                   => Task.CompletedTask
     };
 
-    private async Task HandleMatchStartedAsync(MatchStartedData data, int serverId)
+    private async Task HandleMatchStartedAsync(MatchStartedData data, int serverId, DateTime? eventTime)
     {
         logger.LogInformation("Match started: {MatchGuid} on {Map}", data.MatchGuid, data.Map);
 
@@ -37,7 +39,7 @@ public class MatchIngestionService(
         if (!await db.Matches.AnyAsync(m => m.MatchGuid == matchGuid))
         {
             var match = new Match { QLServerId = serverId };
-            match.Apply(data);
+            match.Apply(data, eventTime);
             db.Matches.Add(match);
             await db.SaveChangesAsync();
         }
@@ -50,7 +52,7 @@ public class MatchIngestionService(
         liveMatch.StartMatch(matchGuid, data.Map, data.GameType, data.ServerTitle, livePlayers);
     }
 
-    private async Task HandleMatchReportAsync(MatchReportData data, int serverId)
+    private async Task HandleMatchReportAsync(MatchReportData data, int serverId, DateTime? eventTime)
     {
         logger.LogInformation("Match report: {MatchGuid}, RED={Red} BLUE={Blue}, Aborted={Aborted}",
             data.MatchGuid, data.Tscore0, data.Tscore1, data.Aborted);
@@ -66,7 +68,7 @@ public class MatchIngestionService(
             db.Matches.Add(match);
         }
 
-        match.Apply(data);
+        match.Apply(data, eventTime);
 
         // Back-fill rounds on any MatchPlayers already created by PLAYER_STATS events
         var players = await db.MatchPlayers.Where(mp => mp.MatchId == match.Id).ToListAsync();
@@ -82,6 +84,8 @@ public class MatchIngestionService(
             liveMatch.UpdateMatchInfo(data.Map, data.GameType, data.ServerTitle);
 
         liveMatch.EndMatch();
+        standingsNotifier.NotifyStandingsChanged();
+        await standingsService.SnapshotSeasonForMatchAsync(match.StartedAt);
     }
 
     private async Task HandlePlayerStatsAsync(PlayerStatsData data)
@@ -142,6 +146,11 @@ public class MatchIngestionService(
             var killer = await EnsurePlayerAsync(db, killerSteamId, data.Killer!.Name);
             var kmp = await EnsureMatchPlayerAsync(db, match.Id, killer.Id);
             kmp.Kills++;
+            if (!string.IsNullOrEmpty(data.Killer.Weapon))
+            {
+                var weapon = data.Killer.Weapon;
+                kmp.Weapons[weapon] = kmp.Weapons.TryGetValue(weapon, out var wk) ? wk + 1 : 1;
+            }
         }
 
         if (data.Victim?.SteamId is { Length: > 0 } victimSteamId)

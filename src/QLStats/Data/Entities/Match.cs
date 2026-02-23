@@ -22,16 +22,18 @@ public class Match :
     public ICollection<MatchPlayer> MatchPlayers { get; set; } = [];
     public ICollection<RoundResult> RoundResults { get; set; } = [];
 
-    public void Apply(MatchStartedData @event)
+    public void Apply(MatchStartedData @event) => Apply(@event, null);
+    public void Apply(MatchStartedData @event, DateTime? at)
     {
         MatchGuid = @event.MatchGuid.ToString();
         Map = @event.Map;
         GameType = @event.GameType;
         ServerTitle = @event.ServerTitle;
-        StartedAt = DateTime.UtcNow;
+        StartedAt = at ?? DateTime.UtcNow;
     }
 
-    public void Apply(MatchReportData @event)
+    public void Apply(MatchReportData @event) => Apply(@event, null);
+    public void Apply(MatchReportData @event, DateTime? at)
     {
         // Only overwrite if MATCH_STARTED didn't already populate these
         if (string.IsNullOrEmpty(Map)) Map = @event.Map;
@@ -39,6 +41,6 @@ public class Match :
         if (string.IsNullOrEmpty(ServerTitle)) ServerTitle = @event.ServerTitle;
         TeamRedRounds = @event.Tscore0;
         TeamBlueRounds = @event.Tscore1;
-        FinishedAt = DateTime.UtcNow;
+        FinishedAt = at ?? DateTime.UtcNow;
     }
 }

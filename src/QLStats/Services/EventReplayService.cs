@@ -7,6 +7,7 @@ namespace QLStats.Services;
 public class EventReplayService(
     IDbContextFactory<AppDbContext> dbFactory,
     MatchIngestionService ingestion,
+    StandingsService standings,
     ILogger<EventReplayService> logger)
 {
     public async Task<int> ReplayUnprocessedAsync()
@@ -22,11 +23,12 @@ public class EventReplayService(
         int count = 0;
         foreach (var ev in events)
         {
-            await ProcessEventAsync(ev.Id, ev.QLServerId, ev.RawJson, db);
+            await ProcessEventAsync(ev.Id, ev.QLServerId, ev.RawJson, ev.ReceivedAt, db);
             count++;
         }
 
         logger.LogInformation("Replayed {Count} unprocessed events", count);
+        await standings.SnapshotAllSeasonsAsync();
         return count;
     }
 
@@ -53,22 +55,23 @@ public class EventReplayService(
         int count = 0;
         foreach (var ev in events)
         {
-            await ProcessEventAsync(ev.Id, ev.QLServerId, ev.RawJson, db);
+            await ProcessEventAsync(ev.Id, ev.QLServerId, ev.RawJson, ev.ReceivedAt, db);
             count++;
         }
 
         logger.LogInformation("Full replay complete: {Count} events processed", count);
+        await standings.SnapshotAllSeasonsAsync();
         return count;
     }
 
     private async Task ProcessEventAsync(long eventId, int serverId,
-        string rawJson, AppDbContext db)
+        string rawJson, DateTime eventTime, AppDbContext db)
     {
         try
         {
             var @event = QLEventParser.Parse(rawJson)?.GetEvent();
             if (@event is { Warmup: false })
-                await ingestion.HandleAsync(@event, serverId);
+                await ingestion.HandleAsync(@event, serverId, eventTime);
 
             await db.ZmqEvents
                 .Where(e => e.Id == eventId)

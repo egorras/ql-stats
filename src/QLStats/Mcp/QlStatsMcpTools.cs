@@ -7,7 +7,7 @@ using System.ComponentModel;
 namespace QLStats.Mcp;
 
 [McpServerToolType]
-public class QlStatsMcpTools(AppDbContext db, StandingsService standings)
+public class QlStatsMcpTools(AppDbContext db, DuoAnalyticsService duoService, MapAnalyticsService mapService)
 {
     [McpServerTool, Description("List all seasons with their Id, Name, IsActive, StartDate and EndDate.")]
     public async Task<object> ListSeasons()
@@ -27,14 +27,22 @@ public class QlStatsMcpTools(AppDbContext db, StandingsService standings)
         return seasons;
     }
 
-    [McpServerTool, Description("Get the full leaderboard for a season, including points breakdown and raw stats (kills, deaths, wins, losses, damage).")]
+    [McpServerTool, Description("Get the full leaderboard for a season from the persisted standings snapshot. Includes points, raw stats and K/D. SnappedAt shows when standings were last computed.")]
     public async Task<object> GetSeasonStandings([Description("The season Id")] int seasonId)
     {
-        var list = await standings.GetSeasonStandingsAsync(seasonId);
-        return list.Select(s => new
+        var rows = await db.SeasonStandings
+            .Include(ss => ss.Player)
+            .Where(ss => ss.SeasonId == seasonId)
+            .OrderByDescending(ss => ss.TotalPoints)
+            .ToListAsync();
+
+        if (rows.Count == 0)
+            return new { SeasonId = seasonId, Message = "No standings snapshot yet — run a Full Rebuild or wait for the next match to finish." };
+
+        return rows.Select(s => new
         {
             s.PlayerId,
-            s.DisplayName,
+            DisplayName = s.Player.DisplayName,
             TotalPoints = Math.Round(s.TotalPoints, 2),
             s.Kills,
             s.Deaths,
@@ -45,7 +53,7 @@ public class QlStatsMcpTools(AppDbContext db, StandingsService standings)
             s.RoundsLost,
             s.DamageDealt,
             s.MatchesPlayed,
-            Breakdown = s.RulesBreakdown.ToDictionary(kvp => kvp.Key, kvp => Math.Round(kvp.Value, 2))
+            SnappedAt = s.SnappedAt.ToString("yyyy-MM-dd HH:mm:ss")
         }).ToList();
     }
 
@@ -81,9 +89,9 @@ public class QlStatsMcpTools(AppDbContext db, StandingsService standings)
             var season = await db.Seasons.FindAsync(seasonId.Value);
             if (season is not null)
             {
-                var startDt = season.StartDate.ToDateTime(TimeOnly.MinValue);
+                var startDt = DateTime.SpecifyKind(season.StartDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
                 var endDt = season.EndDate.HasValue
-                    ? season.EndDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue)
+                    ? DateTime.SpecifyKind(season.EndDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc)
                     : DateTime.MaxValue;
                 query = query.Where(mp => mp.Match.StartedAt >= startDt && mp.Match.StartedAt < endDt);
             }
@@ -158,7 +166,9 @@ public class QlStatsMcpTools(AppDbContext db, StandingsService standings)
                 KD = mp.Deaths == 0 ? (double)mp.Kills : Math.Round((double)mp.Kills / mp.Deaths, 2),
                 mp.DamageDealt,
                 mp.RoundsWon,
-                mp.RoundsLost
+                mp.RoundsLost,
+                Weapons = mp.Weapons.OrderByDescending(w => w.Value)
+                    .ToDictionary(w => w.Key, w => w.Value)
             }).OrderBy(p => p.Team).ToList(),
             Rounds = match.RoundResults.OrderBy(r => r.RoundNumber).Select(r => new
             {
@@ -199,9 +209,9 @@ public class QlStatsMcpTools(AppDbContext db, StandingsService standings)
             var season = await db.Seasons.FindAsync(seasonId.Value);
             if (season is not null)
             {
-                var startDt = season.StartDate.ToDateTime(TimeOnly.MinValue);
+                var startDt = DateTime.SpecifyKind(season.StartDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
                 var endDt = season.EndDate.HasValue
-                    ? season.EndDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue)
+                    ? DateTime.SpecifyKind(season.EndDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc)
                     : DateTime.MaxValue;
                 query = query.Where(m => m.StartedAt >= startDt && m.StartedAt < endDt);
             }
@@ -229,6 +239,68 @@ public class QlStatsMcpTools(AppDbContext db, StandingsService standings)
                 mp.Deaths
             }).ToList()
         }).ToList();
+    }
+
+    [McpServerTool, Description("Get top duo pairs by win rate. Players who played together on the same team. Optional filters: seasonId, mapName, limit.")]
+    public async Task<object> GetTopDuos(
+        [Description("Filter by season Id (optional)")] int? seasonId = null,
+        [Description("Filter by exact map name (optional)")] string? mapName = null,
+        [Description("Max results to return (default 20)")] int limit = 20)
+    {
+        var duos = await duoService.GetDuoStatsAsync(seasonId, mapName, limit);
+        return duos.Select(d => new
+        {
+            d.Player1Id,
+            d.Player1Name,
+            d.Player2Id,
+            d.Player2Name,
+            d.MatchesPlayed,
+            d.Wins,
+            d.Losses,
+            d.WinRate,
+            d.CombinedKills,
+            d.CombinedDamage,
+            d.AvgKillsPerMatch,
+            d.AvgDamagePerMatch
+        }).ToList();
+    }
+
+    [McpServerTool, Description("Get analytics for a specific map: per-player stats, game type breakdown, and top duo pairs.")]
+    public async Task<object> GetMapStats([Description("Exact map name")] string mapName)
+    {
+        var playerStats = await mapService.GetMapPlayerStatsAsync(mapName);
+        var gameTypes = await mapService.GetMapGameTypeBreakdownAsync(mapName);
+        var duos = await duoService.GetDuoStatsAsync(mapName: mapName, topN: 10);
+
+        if (playerStats.Count == 0)
+            return new { Error = $"No data found for map '{mapName}'" };
+
+        return new
+        {
+            MapName = mapName,
+            GameTypes = gameTypes.Select(g => new { g.GameType, g.Count }).ToList(),
+            Players = playerStats.Select(p => new
+            {
+                p.PlayerId,
+                p.DisplayName,
+                p.Matches,
+                p.Wins,
+                p.Losses,
+                p.WinRate,
+                p.Kills,
+                p.Deaths,
+                p.KD,
+                p.DamageDealt
+            }).ToList(),
+            TopDuos = duos.Select(d => new
+            {
+                d.Player1Name,
+                d.Player2Name,
+                d.MatchesPlayed,
+                d.Wins,
+                d.WinRate
+            }).ToList()
+        };
     }
 
     [McpServerTool, Description("Get win/loss head-to-head record between two players when they are on opposing teams.")]

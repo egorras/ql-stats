@@ -26,6 +26,7 @@ public class MatchIngestionServiceTests
         var live = new LiveMatchState();
         var sut = new MatchIngestionService(
             new TestDbContextFactory(options), live,
+            new StandingsNotifier(),
             NullLogger<MatchIngestionService>.Instance);
 
         return (sut, live, options);

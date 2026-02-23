@@ -40,6 +40,7 @@ else
                     <MudTh>D</MudTh>
                     <MudTh>K/D</MudTh>
                     <MudTh>Dmg</MudTh>
+                    <MudTh>Weapons</MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd>@context.Player.DisplayName</MudTd>
@@ -52,6 +53,22 @@ else
                     <MudTd>@context.Deaths</MudTd>
                     <MudTd>@(context.Deaths == 0 ? context.Kills.ToString() : ((double)context.Kills / context.Deaths).ToString("0.##"))</MudTd>
                     <MudTd>@context.DamageDealt.ToString("N0")</MudTd>
+                    <MudTd>
+                        @if (context.Weapons.Count > 0)
+                        {
+                            <MudTooltip>
+                                <TooltipContent>
+                                    @foreach (var kv in context.Weapons.OrderByDescending(w => w.Value))
+                                    {
+                                        <div>@kv.Key: @kv.Value kills</div>
+                                    }
+                                </TooltipContent>
+                                <ChildContent>
+                                    <MudText Typo="Typo.caption">@GetTopWeapon(context.Weapons)</MudText>
+                                </ChildContent>
+                            </MudTooltip>
+                        }
+                    </MudTd>
                 </RowTemplate>
             </MudTable>
         </MudItem>
@@ -66,6 +83,7 @@ else
                     <MudTh>D</MudTh>
                     <MudTh>K/D</MudTh>
                     <MudTh>Dmg</MudTh>
+                    <MudTh>Weapons</MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd>@context.Player.DisplayName</MudTd>
@@ -78,6 +96,22 @@ else
                     <MudTd>@context.Deaths</MudTd>
                     <MudTd>@(context.Deaths == 0 ? context.Kills.ToString() : ((double)context.Kills / context.Deaths).ToString("0.##"))</MudTd>
                     <MudTd>@context.DamageDealt.ToString("N0")</MudTd>
+                    <MudTd>
+                        @if (context.Weapons.Count > 0)
+                        {
+                            <MudTooltip>
+                                <TooltipContent>
+                                    @foreach (var kv in context.Weapons.OrderByDescending(w => w.Value))
+                                    {
+                                        <div>@kv.Key: @kv.Value kills</div>
+                                    }
+                                </TooltipContent>
+                                <ChildContent>
+                                    <MudText Typo="Typo.caption">@GetTopWeapon(context.Weapons)</MudText>
+                                </ChildContent>
+                            </MudTooltip>
+                        }
+                    </MudTd>
                 </RowTemplate>
             </MudTable>
         </MudItem>
@@ -119,5 +153,11 @@ else
             _redPlayers = _match.MatchPlayers.Where(mp => mp.Team == "RED").ToList();
             _bluePlayers = _match.MatchPlayers.Where(mp => mp.Team == "BLUE").ToList();
         }
+    }
+
+    private static string GetTopWeapon(Dictionary<string, int> weapons)
+    {
+        var top = weapons.MaxBy(kv => kv.Value);
+        return $"{top.Key} ({top.Value})";
     }
 }

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using QLStats.Data;
+using QLStats.Data.Entities;
 
 namespace QLStats.Services;
 
@@ -20,21 +21,24 @@ public record PlayerStanding(
     int MatchesPlayed
 );
 
-public class StandingsService(AppDbContext db)
+public class StandingsService(
+    IDbContextFactory<AppDbContext> dbFactory,
+    ILogger<StandingsService> logger)
 {
     public async Task<List<PlayerStanding>> GetSeasonStandingsAsync(int seasonId)
     {
+        await using var db = await dbFactory.CreateDbContextAsync();
+
         var season = await db.Seasons
             .Include(s => s.Rules)
             .FirstOrDefaultAsync(s => s.Id == seasonId)
             ?? throw new InvalidOperationException($"Season {seasonId} not found");
 
-        var startDt = season.StartDate.ToDateTime(TimeOnly.MinValue);
+        var startDt = DateTime.SpecifyKind(season.StartDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
         var endDt = season.EndDate.HasValue
-            ? season.EndDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue)
+            ? DateTime.SpecifyKind(season.EndDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc)
             : DateTime.MaxValue;
 
-        // Load all match players whose match falls within the season's date range
         var matchPlayers = await db.MatchPlayers
             .Include(mp => mp.Player)
             .Include(mp => mp.Match)
@@ -90,5 +94,72 @@ public class StandingsService(AppDbContext db)
         .ToList();
 
         return standings;
+    }
+
+    public async Task SnapshotSeasonAsync(int seasonId)
+    {
+        var standings = await GetSeasonStandingsAsync(seasonId);
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var now = DateTime.UtcNow;
+
+        foreach (var s in standings)
+        {
+            var existing = await db.SeasonStandings
+                .FirstOrDefaultAsync(ss => ss.SeasonId == seasonId && ss.PlayerId == s.PlayerId);
+
+            if (existing is null)
+            {
+                db.SeasonStandings.Add(new SeasonStanding
+                {
+                    SeasonId = seasonId,
+                    PlayerId = s.PlayerId,
+                    TotalPoints = s.TotalPoints,
+                    Kills = s.Kills,
+                    Deaths = s.Deaths,
+                    Wins = s.Wins,
+                    Losses = s.Losses,
+                    RoundsWon = s.RoundsWon,
+                    RoundsLost = s.RoundsLost,
+                    DamageDealt = s.DamageDealt,
+                    MatchesPlayed = s.MatchesPlayed,
+                    SnappedAt = now
+                });
+            }
+            else
+            {
+                existing.TotalPoints = s.TotalPoints;
+                existing.Kills = s.Kills;
+                existing.Deaths = s.Deaths;
+                existing.Wins = s.Wins;
+                existing.Losses = s.Losses;
+                existing.RoundsWon = s.RoundsWon;
+                existing.RoundsLost = s.RoundsLost;
+                existing.DamageDealt = s.DamageDealt;
+                existing.MatchesPlayed = s.MatchesPlayed;
+                existing.SnappedAt = now;
+            }
+        }
+
+        await db.SaveChangesAsync();
+        logger.LogInformation("Snapshotted standings for season {SeasonId}: {Count} players", seasonId, standings.Count);
+    }
+
+    public async Task SnapshotAllSeasonsAsync()
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var seasonIds = await db.Seasons.Select(s => s.Id).ToListAsync();
+        foreach (var id in seasonIds)
+            await SnapshotSeasonAsync(id);
+    }
+
+    public async Task SnapshotSeasonForMatchAsync(DateTime matchStartedAt)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var matchDate = DateOnly.FromDateTime(matchStartedAt);
+        var season = await db.Seasons
+            .FirstOrDefaultAsync(s => s.StartDate <= matchDate && (s.EndDate == null || s.EndDate >= matchDate));
+        if (season is not null)
+            await SnapshotSeasonAsync(season.Id);
     }
 }

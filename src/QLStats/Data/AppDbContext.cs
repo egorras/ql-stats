@@ -14,6 +14,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<RoundResult> RoundResults => Set<RoundResult>();
     public DbSet<ZmqEvent> ZmqEvents => Set<ZmqEvent>();
     public DbSet<ScoringRule> ScoringRules => Set<ScoringRule>();
+    public DbSet<SeasonStanding> SeasonStandings => Set<SeasonStanding>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -34,6 +35,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<Season>(e =>
         {
             e.Property(s => s.Name).HasMaxLength(128);
+            e.HasIndex(s => s.IsActive)
+                .HasFilter("is_active = true")
+                .IsUnique()
+                .HasDatabaseName("ix_seasons_one_active");
         });
 
         modelBuilder.Entity<Match>(e =>
@@ -55,6 +60,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(mp => new { mp.MatchId, mp.PlayerId }).IsUnique();
             e.Property(mp => mp.Team).HasMaxLength(8);
             e.Property(mp => mp.Medals)
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => JsonSerializer.Deserialize<Dictionary<string, int>>(v, (JsonSerializerOptions?)null) ?? new())
+                .HasColumnType("jsonb");
+            e.Property(mp => mp.Weapons)
                 .HasConversion(
                     v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
                     v => JsonSerializer.Deserialize<Dictionary<string, int>>(v, (JsonSerializerOptions?)null) ?? new())
@@ -88,6 +98,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany(s => s.ZmqEvents)
                 .HasForeignKey(z => z.QLServerId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<SeasonStanding>(e =>
+        {
+            e.HasIndex(ss => new { ss.SeasonId, ss.PlayerId }).IsUnique();
+            e.Property(ss => ss.TotalPoints).HasPrecision(12, 4);
+            e.HasOne(ss => ss.Season)
+                .WithMany()
+                .HasForeignKey(ss => ss.SeasonId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(ss => ss.Player)
+                .WithMany()
+                .HasForeignKey(ss => ss.PlayerId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ScoringRule>(e =>

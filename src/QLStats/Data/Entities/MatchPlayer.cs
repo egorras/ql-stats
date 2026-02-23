@@ -18,6 +18,7 @@ public class MatchPlayer : ICanApplyEvent<PlayerStatsData>
     public int RoundsWon { get; set; }
     public int RoundsLost { get; set; }
     public Dictionary<string, int> Medals { get; set; } = new();
+    public Dictionary<string, int> Weapons { get; set; } = new();
 
     public Match Match { get; set; } = null!;
     public Player Player { get; set; } = null!;
