@@ -45,7 +45,7 @@ public class MapAnalyticsService(AppDbContext db)
     {
         var matches = await db.Matches
             .Include(m => m.MatchPlayers).ThenInclude(mp => mp.Player)
-            .Where(m => m.FinishedAt != null)
+            .Where(m => m.FinishedAt != null && !m.IsArchived)
             .ToListAsync();
 
         return matches
@@ -90,7 +90,7 @@ public class MapAnalyticsService(AppDbContext db)
         var matchPlayers = await db.MatchPlayers
             .Include(mp => mp.Player)
             .Include(mp => mp.Match)
-            .Where(mp => mp.Match.Map == mapName && mp.Match.FinishedAt != null)
+            .Where(mp => mp.Match.Map == mapName && mp.Match.FinishedAt != null && !mp.Match.IsArchived)
             .ToListAsync();
 
         return matchPlayers

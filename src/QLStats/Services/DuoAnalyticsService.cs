@@ -28,7 +28,7 @@ public class DuoAnalyticsService(AppDbContext db)
         var query = db.MatchPlayers
             .Include(mp => mp.Player)
             .Include(mp => mp.Match)
-            .Where(mp => mp.Match.FinishedAt != null)
+            .Where(mp => mp.Match.FinishedAt != null && !mp.Match.IsArchived)
             .AsQueryable();
 
         if (seasonId.HasValue)

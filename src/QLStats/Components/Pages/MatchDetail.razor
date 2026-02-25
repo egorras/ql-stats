@@ -2,7 +2,10 @@
 @rendermode InteractiveServer
 @using QLStats.Data
 @using QLStats.Data.Entities
+@using QLStats.Services
 @inject AppDbContext Db
+@inject StandingsService StandingsService
+@inject StandingsNotifier StandingsNotifier
 
 <PageTitle>Match Detail — QL Stats</PageTitle>
 
@@ -12,7 +15,22 @@
 }
 else
 {
-    <MudText Typo="Typo.h4" Class="mb-1">@_match.Map</MudText>
+    @if (_match.IsArchived)
+    {
+        <MudAlert Severity="Severity.Warning" Class="mb-3">
+            This match is archived and excluded from standings.
+            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="ToggleArchiveAsync">Unarchive</MudButton>
+        </MudAlert>
+    }
+
+    <div class="d-flex align-center justify-space-between mb-1">
+        <MudText Typo="Typo.h4">@_match.Map</MudText>
+        @if (!_match.IsArchived)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Archive" Color="Color.Warning"
+                           OnClick="() => _confirmOpen = true" />
+        }
+    </div>
     <MudText Color="Color.Secondary" Class="mb-4">
         @_match.StartedAt.ToString("yyyy-MM-dd HH:mm") · @_match.ServerTitle
     </MudText>
@@ -133,12 +151,25 @@ else
     </MudGrid>
 }
 
+<MudDialog @bind-Visible="_confirmOpen">
+    <TitleContent>Archive match</TitleContent>
+    <DialogContent>
+        Archive @(_match?.Map) (@(_match?.StartedAt.ToString("yyyy-MM-dd HH:mm")))?
+        It will be excluded from standings and can be unarchived later.
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _confirmOpen = false">Cancel</MudButton>
+        <MudButton Color="Color.Warning" Variant="Variant.Filled" OnClick="ToggleArchiveAsync">Archive</MudButton>
+    </DialogActions>
+</MudDialog>
+
 @code {
     [Parameter] public int MatchId { get; set; }
 
     private Match? _match;
     private List<MatchPlayer> _redPlayers = [];
     private List<MatchPlayer> _bluePlayers = [];
+    private bool _confirmOpen;
 
     protected override async Task OnInitializedAsync()
     {
@@ -153,6 +184,15 @@ else
             _redPlayers = _match.MatchPlayers.Where(mp => mp.Team == "RED").ToList();
             _bluePlayers = _match.MatchPlayers.Where(mp => mp.Team == "BLUE").ToList();
         }
+    }
+
+    private async Task ToggleArchiveAsync()
+    {
+        _confirmOpen = false;
+        _match!.IsArchived = !_match.IsArchived;
+        await Db.SaveChangesAsync();
+        await StandingsService.SnapshotSeasonForMatchAsync(_match.StartedAt);
+        StandingsNotifier.NotifyStandingsChanged();
     }
 
     private static string GetTopWeapon(Dictionary<string, int> weapons)

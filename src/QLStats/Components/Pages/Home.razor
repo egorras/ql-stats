@@ -10,9 +10,7 @@
 @inject LiveMatchState LiveMatch
 @implements IDisposable
 
-<PageTitle>Live — QL Stats</PageTitle>
-
-<MudText Typo="Typo.h4" Class="mb-4">Live</MudText>
+<PageTitle>@(_activeSeason?.Name ?? "Live") — QL Stats</PageTitle>
 
 @* ─── Live Match Header ────────────────────────────────────────────────── *@
 @if (_liveMatch is not null)
@@ -40,222 +38,364 @@
     </MudCard>
 }
 
-@* ─── Season Summary Cards ─────────────────────────────────────────────── *@
-@if (_activeSeason is not null && _standings.Count > 0)
+@if (_activeSeason is null)
 {
-    <MudGrid Class="mb-4">
-        <MudItem xs="12" sm="6" md="3">
-            <MudPaper Class="pa-3 d-flex align-center gap-3" Elevation="2">
-                <MudIcon Icon="@Icons.Material.Filled.EmojiEvents" Color="Color.Warning" Size="Size.Large" />
-                <div>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">Top Scorer</MudText>
-                    <MudText Typo="Typo.body1"><strong>@(_standings.FirstOrDefault()?.DisplayName ?? "—")</strong></MudText>
-                    <MudText Typo="Typo.caption">@(_standings.FirstOrDefault()?.TotalPoints.ToString("0.##") ?? "0") pts</MudText>
-                </div>
-            </MudPaper>
-        </MudItem>
-        <MudItem xs="12" sm="6" md="3">
-            <MudPaper Class="pa-3 d-flex align-center gap-3" Elevation="2">
-                <MudIcon Icon="@Icons.Material.Filled.GpsFixed" Color="Color.Success" Size="Size.Large" />
-                <div>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">Best K/D (min 3 matches)</MudText>
-                    <MudText Typo="Typo.body1"><strong>@(_bestKd?.DisplayName ?? "—")</strong></MudText>
-                    <MudText Typo="Typo.caption">@(_bestKd is not null ? (_bestKd.Deaths == 0 ? _bestKd.Kills.ToString() : ((double)_bestKd.Kills / _bestKd.Deaths).ToString("0.##")) : "—")</MudText>
-                </div>
-            </MudPaper>
-        </MudItem>
-        <MudItem xs="12" sm="6" md="3">
-            <MudPaper Class="pa-3 d-flex align-center gap-3" Elevation="2">
-                <MudIcon Icon="@Icons.Material.Filled.Whatshot" Color="Color.Error" Size="Size.Large" />
-                <div>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">Most Damage</MudText>
-                    <MudText Typo="Typo.body1"><strong>@(_mostDamage?.DisplayName ?? "—")</strong></MudText>
-                    <MudText Typo="Typo.caption">@(_mostDamage?.DamageDealt.ToString("N0") ?? "0")</MudText>
-                </div>
-            </MudPaper>
-        </MudItem>
-        <MudItem xs="12" sm="6" md="3">
-            <MudPaper Class="pa-3 d-flex align-center gap-3" Elevation="2">
-                <MudIcon Icon="@Icons.Material.Filled.Group" Color="Color.Info" Size="Size.Large" />
-                <div>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">Top Duo (min 3 matches)</MudText>
-                    <MudText Typo="Typo.body1"><strong>@(_topDuo is not null ? $"{_topDuo.Player1Name} & {_topDuo.Player2Name}" : "—")</strong></MudText>
-                    <MudText Typo="Typo.caption">@(_topDuo is not null ? $"{_topDuo.WinRate}% WR in {_topDuo.MatchesPlayed} matches" : "—")</MudText>
-                </div>
-            </MudPaper>
-        </MudItem>
-    </MudGrid>
+    <MudAlert Severity="Severity.Warning">No active season. <MudLink Href="/seasons">Create one</MudLink></MudAlert>
 }
+else
+{
+    @* ─── Season Header ──────────────────────────────────────────────────── *@
+    <div class="d-flex align-center justify-space-between mb-2">
+        <div>
+            <MudText Typo="Typo.h4" Class="mb-0">@_activeSeason.Name</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                @_activeSeason.StartDate.ToString("MMM d, yyyy") –
+                @(_activeSeason.EndDate?.ToString("MMM d, yyyy") ?? "ongoing")
+            </MudText>
+        </div>
+        <MudButton Href="@($"/seasons/{_activeSeason.Id}")" Variant="Variant.Text"
+                   StartIcon="@Icons.Material.Filled.Analytics">Analytics</MudButton>
+    </div>
 
-@* ─── Main Grid: Standings + Sidebar ──────────────────────────────────── *@
-<MudGrid>
-    <MudItem xs="12" md="8">
-        @if (_activeSeason is not null && _standings.Count > 0)
-        {
-            <MudCard Class="mb-4">
-                <MudCardHeader>
-                    <CardHeaderContent>
-                        <MudText Typo="Typo.h6">@_activeSeason.Name — Standings</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">
-                            @_activeSeason.StartDate.ToString("MMM d, yyyy") –
-                            @(_activeSeason.EndDate?.ToString("MMM d, yyyy") ?? "ongoing")
-                        </MudText>
-                    </CardHeaderContent>
-                    <CardHeaderActions>
-                        <MudButton Href="@($"/seasons/{_activeSeason.Id}")" Variant="Variant.Text">Full standings</MudButton>
-                    </CardHeaderActions>
-                </MudCardHeader>
-                <MudCardContent>
-                    <div style="overflow-x:auto">
-                        <MudTable Items="_standings" Dense="true" Hover="true" Elevation="0">
-                            <HeaderContent>
-                                <MudTh>#</MudTh>
-                                <MudTh>Player</MudTh>
-                                <MudTh>Pts</MudTh>
-                                @if (_liveMatch is not null)
-                                {
-                                    <MudTh>
-                                        <MudTooltip Text="Projected points in current match (excludes win/loss and damage bonuses)">
-                                            Live Pts *
-                                        </MudTooltip>
-                                    </MudTh>
-                                }
-                                @foreach (var ruleName in _ruleNames)
-                                {
-                                    <MudTh>@ruleName</MudTh>
-                                }
-                                <MudTh>W</MudTh>
-                                <MudTh>L</MudTh>
-                                <MudTh>K</MudTh>
-                                <MudTh>D</MudTh>
-                                <MudTh>K/D</MudTh>
-                            </HeaderContent>
-                            <RowTemplate>
-                                <MudTd>@(_standings.IndexOf(context) + 1)</MudTd>
-                                <MudTd>@context.DisplayName</MudTd>
-                                <MudTd><strong>@context.TotalPoints.ToString("0.##")</strong></MudTd>
-                                @if (_liveMatch is not null)
-                                {
-                                    <MudTd>
-                                        <span class="live-pts-cell">
-                                            @if (GetLiveProj(context.DisplayName) is { } proj)
-                                            {
-                                                <strong>@proj.EstimatedPoints.ToString("0.##")</strong>
-                                            }
-                                            else
-                                            {
-                                                <span style="color:var(--mud-palette-text-disabled)">—</span>
-                                            }
-                                            @if (GetActiveDelta(context.DisplayName) is { } delta)
-                                            {
-                                                <span @key="@($"{context.DisplayName}|{delta.At.Ticks}")"
-                                                      class="pts-delta @(delta.Delta > 0 ? "pts-delta--pos" : "pts-delta--neg")">
-                                                    @(delta.Delta > 0 ? "+" : "")@delta.Delta.ToString("0.##")
-                                                </span>
-                                            }
-                                        </span>
-                                    </MudTd>
-                                }
-                                @foreach (var ruleName in _ruleNames)
-                                {
-                                    <MudTd @key="ruleName">
-                                        @if (context.RulesBreakdown.TryGetValue(ruleName, out var ruleVal))
-                                        {
-                                            @ruleVal.ToString("0.##")
-                                        }
-                                        else
-                                        {
-                                            <span style="color:var(--mud-palette-text-disabled)">—</span>
-                                        }
-                                    </MudTd>
-                                }
-                                <MudTd>@context.Wins</MudTd>
-                                <MudTd>@context.Losses</MudTd>
-                                <MudTd>@context.Kills</MudTd>
-                                <MudTd>@context.Deaths</MudTd>
-                                <MudTd>@(context.Deaths == 0 ? context.Kills.ToString() : ((double)context.Kills / context.Deaths).ToString("0.##"))</MudTd>
-                            </RowTemplate>
-                        </MudTable>
+    @* ─── Summary Cards ───────────────────────────────────────────────────── *@
+    @if (_standings.Count > 0)
+    {
+        <MudGrid Class="mb-4">
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-3 d-flex align-center gap-3" Elevation="2">
+                    <MudIcon Icon="@Icons.Material.Filled.EmojiEvents" Color="Color.Warning" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Top Scorer</MudText>
+                        <MudText Typo="Typo.body1"><strong>@_standings[0].DisplayName</strong></MudText>
+                        <MudText Typo="Typo.caption">@_standings[0].TotalPoints.ToString("0.##") pts</MudText>
                     </div>
-                    @if (_liveMatch is not null)
-                    {
-                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
-                            * Live Pts: current match only. Win/loss and damage bonuses not included until match ends.
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-3 d-flex align-center gap-3" Elevation="2">
+                    <MudIcon Icon="@Icons.Material.Filled.GpsFixed" Color="Color.Success" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Best K/D (min 3)</MudText>
+                        <MudText Typo="Typo.body1"><strong>@(_bestKd?.DisplayName ?? "—")</strong></MudText>
+                        <MudText Typo="Typo.caption">
+                            @(_bestKd is not null ? (_bestKd.Deaths == 0 ? _bestKd.Kills.ToString() : ((double)_bestKd.Kills / _bestKd.Deaths).ToString("0.##")) : "—")
                         </MudText>
-                    }
-                </MudCardContent>
-            </MudCard>
-        }
-        else if (_activeSeason is null)
-        {
-            <MudAlert Severity="Severity.Warning" Class="mb-4">
-                No active season. <MudLink Href="/seasons">Create one</MudLink>
-            </MudAlert>
-        }
-    </MudItem>
+                    </div>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-3 d-flex align-center gap-3" Elevation="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Whatshot" Color="Color.Error" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Most Damage</MudText>
+                        <MudText Typo="Typo.body1"><strong>@(_mostDamage?.DisplayName ?? "—")</strong></MudText>
+                        <MudText Typo="Typo.caption">@(_mostDamage?.DamageDealt.ToString("N0") ?? "0")</MudText>
+                    </div>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-3 d-flex align-center gap-3" Elevation="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Group" Color="Color.Info" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Top Duo (min 3)</MudText>
+                        <MudText Typo="Typo.body1">
+                            <strong>@(_topDuo is not null ? $"{_topDuo.Player1Name} & {_topDuo.Player2Name}" : "—")</strong>
+                        </MudText>
+                        <MudText Typo="Typo.caption">
+                            @(_topDuo is not null ? $"{_topDuo.WinRate}% WR in {_topDuo.MatchesPlayed} matches" : "—")
+                        </MudText>
+                    </div>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
 
-    <MudItem xs="12" md="4">
-        @if (_liveMatch is not null)
-        {
-            <MudCard Class="mb-4">
-                <MudCardHeader>
-                    <CardHeaderContent>
-                        <MudText Typo="Typo.h6">
-                            <MudIcon Icon="@Icons.Material.Filled.GpsFixed" Class="mr-1" />
-                            Kill Feed
-                        </MudText>
-                    </CardHeaderContent>
-                </MudCardHeader>
-                <MudCardContent Style="max-height:350px;overflow-y:auto;">
-                    @if (_liveMatch.KillFeed.Count == 0)
+    @* ─── Standings + Kill Feed ───────────────────────────────────────────── *@
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" md="@(_liveMatch is not null ? 8 : 12)">
+            <MudCard>
+                <MudCardContent>
+                    @if (_standings.Count == 0)
                     {
-                        <MudText Color="Color.Secondary">Waiting for kills...</MudText>
+                        <MudAlert Severity="Severity.Info">No matches recorded for this season yet.</MudAlert>
                     }
                     else
                     {
-                        @foreach (var k in _liveMatch.KillFeed)
+                        <div style="overflow-x:auto">
+                            <MudTable Items="_standings" Dense="true" Hover="true" Elevation="0">
+                                <HeaderContent>
+                                    <MudTh>#</MudTh>
+                                    <MudTh>Player</MudTh>
+                                    <MudTh>M</MudTh>
+                                    <MudTh>Pts</MudTh>
+                                    @if (_liveMatch is not null)
+                                    {
+                                        <MudTh>
+                                            <MudTooltip Text="Projected points in current match (excludes win/loss and damage bonuses)">
+                                                Live *
+                                            </MudTooltip>
+                                        </MudTh>
+                                    }
+                                    <MudTh>K</MudTh>
+                                    <MudTh>D</MudTh>
+                                    <MudTh>K/D</MudTh>
+                                    <MudTh>Dmg</MudTh>
+                                    <MudTh>W</MudTh>
+                                    <MudTh>L</MudTh>
+                                    <MudTh>Sui</MudTh>
+                                    <MudTh>Medals</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd>@(_standings.IndexOf(context) + 1)</MudTd>
+                                    <MudTd><strong>@context.DisplayName</strong></MudTd>
+                                    <MudTd>@context.MatchesPlayed</MudTd>
+                                    <MudTd>
+                                        <MudTooltip Text="@GetBreakdownTooltip(context)">
+                                            <strong>@context.TotalPoints.ToString("0.##")</strong>
+                                        </MudTooltip>
+                                    </MudTd>
+                                    @if (_liveMatch is not null)
+                                    {
+                                        <MudTd>
+                                            <span class="live-pts-cell">
+                                                @if (GetLiveProj(context.DisplayName) is { } proj)
+                                                {
+                                                    <strong>@proj.EstimatedPoints.ToString("0.##")</strong>
+                                                }
+                                                else
+                                                {
+                                                    <span style="color:var(--mud-palette-text-disabled)">—</span>
+                                                }
+                                                @if (GetActiveDelta(context.DisplayName) is { } delta)
+                                                {
+                                                    <span @key="@($"{context.DisplayName}|{delta.At.Ticks}")"
+                                                          class="pts-delta @(delta.Delta > 0 ? "pts-delta--pos" : "pts-delta--neg")">
+                                                        @(delta.Delta > 0 ? "+" : "")@delta.Delta.ToString("0.##")
+                                                    </span>
+                                                }
+                                            </span>
+                                        </MudTd>
+                                    }
+                                    @* K — with kill-pts superscript *@
+                                    <MudTd>
+                                        @{ var kPts = GetStatPts(context, ScoringRuleType.KillsMultiplier); }
+                                        @if (kPts != 0)
+                                        {
+                                            <div class="stat-cell">
+                                                <span class="stat-sup @(kPts > 0 ? "stat-sup--pos" : "stat-sup--neg")">@FmtPts(kPts)</span>
+                                                <span>@context.Kills</span>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            @context.Kills
+                                        }
+                                    </MudTd>
+                                    @* D — no pts rule *@
+                                    <MudTd>@context.Deaths</MudTd>
+                                    @* K/D — computed *@
+                                    <MudTd>@(context.Deaths == 0 ? context.Kills.ToString() : ((double)context.Kills / context.Deaths).ToString("0.##"))</MudTd>
+                                    @* Dmg — with damage-pts superscript *@
+                                    <MudTd>
+                                        @{ var dPts = GetStatPts(context, ScoringRuleType.DamageMultiplier); }
+                                        @if (dPts != 0)
+                                        {
+                                            <div class="stat-cell">
+                                                <span class="stat-sup @(dPts > 0 ? "stat-sup--pos" : "stat-sup--neg")">@FmtPts(dPts)</span>
+                                                <span>@context.DamageDealt.ToString("N0")</span>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            @context.DamageDealt.ToString("N0")
+                                        }
+                                    </MudTd>
+                                    @* W — with win-pts superscript *@
+                                    <MudTd>
+                                        @{ var wPts = GetStatPts(context, ScoringRuleType.WinMultiplier); }
+                                        @if (wPts != 0)
+                                        {
+                                            <div class="stat-cell">
+                                                <span class="stat-sup @(wPts > 0 ? "stat-sup--pos" : "stat-sup--neg")">@FmtPts(wPts)</span>
+                                                <span>@context.Wins</span>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            @context.Wins
+                                        }
+                                    </MudTd>
+                                    @* L — no pts rule *@
+                                    <MudTd>@context.Losses</MudTd>
+                                    @* Suicides — with suicides-pts superscript *@
+                                    <MudTd>
+                                        @{ var sPts = GetStatPts(context, ScoringRuleType.SuicidesMultiplier); }
+                                        @if (sPts != 0)
+                                        {
+                                            <div class="stat-cell">
+                                                <span class="stat-sup @(sPts > 0 ? "stat-sup--pos" : "stat-sup--neg")">@FmtPts(sPts)</span>
+                                                <span>@context.Suicides</span>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            @context.Suicides
+                                        }
+                                    </MudTd>
+                                    @* Medals — with medal-pts superscript *@
+                                    <MudTd>
+                                        @{ var mPts = GetStatPts(context, ScoringRuleType.MedalMultiplier); }
+                                        @if (mPts != 0)
+                                        {
+                                            <div class="stat-cell">
+                                                <span class="stat-sup @(mPts > 0 ? "stat-sup--pos" : "stat-sup--neg")">@FmtPts(mPts)</span>
+                                                <span>@context.TotalMedals</span>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            @context.TotalMedals
+                                        }
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        </div>
+                        @if (_liveMatch is not null)
                         {
-                            <MudText Typo="Typo.body2" Class="mb-1">
-                                <span style="color:var(--mud-palette-success)">@k.KillerName</span>
-                                <MudIcon Icon="@Icons.Material.Filled.GpsFixed" Size="Size.Small" Class="mx-1" />
-                                <span style="color:var(--mud-palette-error)">@k.VictimName</span>
-                                <span class="ml-1" style="color:var(--mud-palette-text-secondary)">[@k.Weapon]</span>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                                * Live: current match only — win/loss and damage bonuses excluded until match ends.
                             </MudText>
                         }
                     }
                 </MudCardContent>
             </MudCard>
-        }
+        </MudItem>
 
-        <MudCard>
-            <MudCardHeader>
-                <CardHeaderContent>
-                    <MudText Typo="Typo.h6">Recent Matches</MudText>
-                </CardHeaderContent>
-                <CardHeaderActions>
-                    <MudButton Href="/matches" Variant="Variant.Text">All</MudButton>
-                </CardHeaderActions>
-            </MudCardHeader>
-            <MudCardContent>
-                @if (_recentMatches.Count == 0)
+        @if (_liveMatch is not null)
+        {
+            <MudItem xs="12" md="4">
+                <MudCard Style="height:100%">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">
+                                <MudIcon Icon="@Icons.Material.Filled.GpsFixed" Class="mr-1" />
+                                Kill Feed
+                            </MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent Style="max-height:420px;overflow-y:auto;">
+                        @if (_liveMatch.KillFeed.Count == 0)
+                        {
+                            <MudText Color="Color.Secondary">Waiting for kills...</MudText>
+                        }
+                        else
+                        {
+                            @foreach (var k in _liveMatch.KillFeed)
+                            {
+                                <MudText Typo="Typo.body2" Class="mb-1">
+                                    <span style="color:var(--mud-palette-success)">@k.KillerName</span>
+                                    <MudIcon Icon="@Icons.Material.Filled.GpsFixed" Size="Size.Small" Class="mx-1" />
+                                    <span style="color:var(--mud-palette-error)">@k.VictimName</span>
+                                    <span class="ml-1" style="color:var(--mud-palette-text-secondary)">[@k.Weapon]</span>
+                                </MudText>
+                            }
+                        }
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+
+    @* ─── Season Matches ─────────────────────────────────────────────────── *@
+    @if (_matchRows.Count > 0)
+    {
+        <MudText Typo="Typo.h6" Class="mb-2">Matches</MudText>
+        <MudTable Items="_matchRows" Dense="true" Hover="true">
+            <HeaderContent>
+                <MudTh Style="width:36px"></MudTh>
+                <MudTh>Date</MudTh>
+                <MudTh>Map</MudTh>
+                <MudTh>Score</MudTh>
+                <MudTh>Players</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>
+                    <MudIconButton Size="Size.Small"
+                                   Icon="@(_expandedMatches.Contains(context.Id) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ChevronRight)"
+                                   OnClick="@(() => ToggleMatch(context.Id))" />
+                </MudTd>
+                <MudTd>@context.Date</MudTd>
+                <MudTd><strong>@context.Map</strong></MudTd>
+                <MudTd>
+                    <span style="color:var(--mud-palette-error);font-weight:600">@context.RedScore</span>
+                    <span class="mx-1">–</span>
+                    <span style="color:var(--mud-palette-info);font-weight:600">@context.BlueScore</span>
+                </MudTd>
+                <MudTd>
+                    @foreach (var p in context.Players)
+                    {
+                        <span style="color:@(p.Team == "RED" ? "var(--mud-palette-error)" : "var(--mud-palette-info)")"
+                              class="mr-2">@p.Name</span>
+                    }
+                </MudTd>
+                <MudTd>
+                    <MudIconButton Href="@($"/matches/{context.Id}")"
+                                   Icon="@Icons.Material.Filled.OpenInNew"
+                                   Size="Size.Small" />
+                </MudTd>
+            </RowTemplate>
+            <ChildRowContent>
+                @if (_expandedMatches.Contains(context.Id))
                 {
-                    <MudText Color="Color.Secondary">No matches yet.</MudText>
+                    <MudTr>
+                        <MudTd colspan="6" Style="padding:4px 16px 12px 52px">
+                            <MudTable Items="context.Players" Dense="true" Elevation="0" Outlined="true">
+                                <HeaderContent>
+                                    <MudTh>Player</MudTh>
+                                    <MudTh>W/L</MudTh>
+                                    <MudTh>K</MudTh>
+                                    <MudTh>D</MudTh>
+                                    <MudTh>K/D</MudTh>
+                                    <MudTh>Dmg</MudTh>
+                                    <MudTh>Dmg Taken</MudTh>
+                                    <MudTh>Pts</MudTh>
+                                </HeaderContent>
+                                <RowTemplate Context="p">
+                                    <MudTd>
+                                        <span style="color:@(p.Team == "RED" ? "var(--mud-palette-error)" : "var(--mud-palette-info)")">
+                                            <strong>@p.Name</strong>
+                                        </span>
+                                    </MudTd>
+                                    <MudTd>
+                                        <span style="color:@(p.Won ? "var(--mud-palette-success)" : "var(--mud-palette-error)")">
+                                            @(p.Won ? "W" : "L")
+                                        </span>
+                                    </MudTd>
+                                    <MudTd>@p.Kills</MudTd>
+                                    <MudTd>@p.Deaths</MudTd>
+                                    <MudTd>@(p.Deaths == 0 ? p.Kills.ToString() : ((double)p.Kills / p.Deaths).ToString("0.##"))</MudTd>
+                                    <MudTd>@p.DamageDealt.ToString("N0")</MudTd>
+                                    <MudTd>@p.DamageTaken.ToString("N0")</MudTd>
+                                    <MudTd>
+                                        <MudTooltip Text="@p.PointsBreakdown">
+                                            <span style="color:@(p.Points > 0 ? "#4CAF50" : p.Points < 0 ? "#f44336" : "inherit");font-weight:700">
+                                                @FmtPts(p.Points)
+                                            </span>
+                                        </MudTooltip>
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        </MudTd>
+                    </MudTr>
                 }
-                @foreach (var m in _recentMatches)
-                {
-                    <MudPaper Class="pa-2 mb-2" Elevation="0" Outlined="true">
-                        <MudText Typo="Typo.body2">
-                            <strong>@m.Map</strong> — @m.StartedAt.ToString("MMM d HH:mm")
-                        </MudText>
-                        <MudText Typo="Typo.caption">
-                            RED @m.TeamRedRounds – @m.TeamBlueRounds BLUE
-                        </MudText>
-                    </MudPaper>
-                }
-            </MudCardContent>
-        </MudCard>
-    </MudItem>
-</MudGrid>
+            </ChildRowContent>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new int[]{10, 25, 50}" />
+            </PagerContent>
+        </MudTable>
+    }
+}
 
 <style>
     @@keyframes pt-flash {
@@ -281,18 +421,44 @@
 
     .pts-delta--pos { color: #4CAF50; }
     .pts-delta--neg { color: #f44336; }
+
+    .stat-cell {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0;
+        line-height: 1.1;
+    }
+
+    .stat-sup {
+        font-size: 0.6rem;
+        font-weight: 700;
+        line-height: 1;
+        letter-spacing: 0.01em;
+    }
+
+    .stat-sup--pos { color: #4CAF50; }
+    .stat-sup--neg { color: #f44336; }
 </style>
 
 @code {
     private Season? _activeSeason;
     private List<PlayerStanding> _standings = [];
-    private List<string> _ruleNames = [];
-    private List<Match> _recentMatches = [];
-    private LiveMatchDto? _liveMatch;
+    private Dictionary<string, ScoringRuleType> _ruleTypeByDescription = new();
+
     private PlayerStanding? _bestKd;
     private PlayerStanding? _mostDamage;
     private DuoStats? _topDuo;
 
+    private record MatchPlayerInfo(string Name, string Team, bool Won,
+        int Kills, int Deaths, int DamageDealt, int DamageTaken,
+        decimal Points, string PointsBreakdown);
+    private record MatchRow(int Id, string Map, string Date, int? RedScore, int? BlueScore,
+        List<MatchPlayerInfo> Players);
+    private List<MatchRow> _matchRows = [];
+    private HashSet<int> _expandedMatches = [];
+
+    private LiveMatchDto? _liveMatch;
     private Dictionary<string, LiveProjection> _liveProjections = new();
     private Dictionary<string, decimal> _lastLivePts = new();
     private Dictionary<string, PointDelta> _activeDeltas = new();
@@ -306,11 +472,35 @@
 
     private record PointDelta(decimal Delta, DateTime At);
 
+    // ── helpers ────────────────────────────────────────────────────────────
+
     private LiveProjection? GetLiveProj(string displayName)
         => _liveProjections.TryGetValue(displayName, out var p) ? p : null;
 
     private PointDelta? GetActiveDelta(string displayName)
         => _activeDeltas.TryGetValue(displayName, out var d) ? d : null;
+
+    private decimal GetStatPts(PlayerStanding s, ScoringRuleType type)
+    {
+        decimal total = 0;
+        foreach (var (key, val) in s.RulesBreakdown)
+            if (_ruleTypeByDescription.TryGetValue(key, out var t) && t == type)
+                total += val;
+        return total;
+    }
+
+    private static string FmtPts(decimal pts) => pts > 0 ? $"+{pts:0.##}" : pts.ToString("0.##");
+
+    private void ToggleMatch(int id)
+    {
+        if (!_expandedMatches.Add(id))
+            _expandedMatches.Remove(id);
+    }
+
+    private string GetBreakdownTooltip(PlayerStanding s) =>
+        string.Join(" | ", s.RulesBreakdown.Select(kv => $"{kv.Key}: {kv.Value:0.##}"));
+
+    // ── lifecycle ──────────────────────────────────────────────────────────
 
     protected override async Task OnInitializedAsync()
     {
@@ -331,10 +521,9 @@
             try { _standings = await StandingsService.GetSeasonStandingsAsync(_activeSeason.Id); }
             catch { _standings = []; }
 
-            _ruleNames = [.. _standings
-                .SelectMany(s => s.RulesBreakdown.Keys)
-                .Distinct()
-                .OrderBy(k => k)];
+            _ruleTypeByDescription = _activeSeason.Rules
+                .GroupBy(r => r.GetRuleDescription())
+                .ToDictionary(g => g.Key, g => g.First().Type);
 
             _bestKd = _standings
                 .Where(s => s.MatchesPlayed >= 3)
@@ -348,17 +537,60 @@
                 _topDuo = duos.FirstOrDefault(d => d.MatchesPlayed >= 3);
             }
             catch { _topDuo = null; }
+
+            await LoadMatchesAsync();
         }
 
-        _recentMatches = await Db.Matches
-            .Where(m => m.FinishedAt != null)
-            .OrderByDescending(m => m.StartedAt)
-            .Take(5)
-            .ToListAsync();
-
-        // Recompute projections now that we have the season loaded
         UpdateLiveProjections();
     }
+
+    private async Task LoadMatchesAsync()
+    {
+        if (_activeSeason is null) return;
+
+        var startDt = DateTime.SpecifyKind(_activeSeason.StartDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
+        var endDt = _activeSeason.EndDate.HasValue
+            ? DateTime.SpecifyKind(_activeSeason.EndDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc)
+            : DateTime.MaxValue;
+
+        var matches = await Db.Matches
+            .Include(m => m.MatchPlayers).ThenInclude(mp => mp.Player)
+            .Where(m => m.StartedAt >= startDt && m.StartedAt < endDt
+                        && m.FinishedAt != null && !m.IsArchived)
+            .OrderByDescending(m => m.StartedAt)
+            .ToListAsync();
+
+        _matchRows = matches.Select(m => new MatchRow(
+            Id: m.Id,
+            Map: m.Map,
+            Date: m.StartedAt.ToString("MM/dd HH:mm"),
+            RedScore: m.TeamRedRounds,
+            BlueScore: m.TeamBlueRounds,
+            Players: m.MatchPlayers
+                .OrderBy(mp => mp.Team)
+                .ThenByDescending(mp => mp.Kills)
+                .Select(mp =>
+                {
+                    var (pts, bd) = ScoringEngine.CalculatePointsWithBreakdown(mp, _activeSeason!);
+                    return new MatchPlayerInfo(
+                        Name: mp.Player.DisplayName,
+                        Team: mp.Team,
+                        Won: mp.Won,
+                        Kills: mp.Kills,
+                        Deaths: mp.Deaths,
+                        DamageDealt: mp.DamageDealt,
+                        DamageTaken: mp.DamageTaken,
+                        Points: pts,
+                        PointsBreakdown: bd.Count > 0
+                            ? string.Join(" | ", bd.Select(kv => $"{kv.Key}: {kv.Value:0.##}"))
+                            : "0 pts"
+                    );
+                })
+                .ToList()
+        )).ToList();
+    }
+
+    // ── live match ─────────────────────────────────────────────────────────
 
     private void UpdateLiveProjections()
     {
@@ -394,7 +626,6 @@
                 roundsWon, roundsLost, pts, bd);
         }
 
-        // Compute deltas vs last known projected pts
         foreach (var (name, proj) in newProjections)
         {
             if (_lastLivePts.TryGetValue(name, out var prev) && prev != proj.EstimatedPoints)

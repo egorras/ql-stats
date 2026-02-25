@@ -82,7 +82,7 @@ public class QlStatsMcpTools(AppDbContext db, DuoAnalyticsService duoService, Ma
         var query = db.MatchPlayers
             .Include(mp => mp.Match)
             .Include(mp => mp.Player)
-            .Where(mp => mp.PlayerId == playerId && mp.Match.FinishedAt != null);
+            .Where(mp => mp.PlayerId == playerId && mp.Match.FinishedAt != null && !mp.Match.IsArchived);
 
         if (seasonId.HasValue)
         {
@@ -189,7 +189,7 @@ public class QlStatsMcpTools(AppDbContext db, DuoAnalyticsService duoService, Ma
     {
         var query = db.Matches
             .Include(m => m.MatchPlayers).ThenInclude(mp => mp.Player)
-            .Where(m => m.FinishedAt != null)
+            .Where(m => m.FinishedAt != null && !m.IsArchived)
             .AsQueryable();
 
         if (playerId.HasValue)
@@ -314,7 +314,7 @@ public class QlStatsMcpTools(AppDbContext db, DuoAnalyticsService duoService, Ma
 
         // Find all matches where both players participated on opposing teams
         var matchIds = await db.MatchPlayers
-            .Where(mp => mp.PlayerId == player1Id || mp.PlayerId == player2Id)
+            .Where(mp => (mp.PlayerId == player1Id || mp.PlayerId == player2Id) && !mp.Match.IsArchived)
             .GroupBy(mp => mp.MatchId)
             .Where(g => g.Count() == 2 && g.Select(mp => mp.Team).Distinct().Count() == 2)
             .Select(g => g.Key)

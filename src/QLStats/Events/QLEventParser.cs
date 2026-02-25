@@ -1,13 +1,32 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace QLStats.Events;
+
+// QL ZMQ stats send boolean-like fields (SUICIDE, TEAMKILL, BOT, ...) as integers 0/1
+// rather than JSON true/false. This converter accepts both forms.
+internal sealed class FlexBoolConverter : JsonConverter<bool>
+{
+    public override bool Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        => reader.TokenType switch
+        {
+            JsonTokenType.True    => true,
+            JsonTokenType.False   => false,
+            JsonTokenType.Number  => reader.GetInt32() != 0,
+            _ => throw new JsonException($"Cannot convert token {reader.TokenType} to bool")
+        };
+
+    public override void Write(Utf8JsonWriter writer, bool value, JsonSerializerOptions options)
+        => writer.WriteBooleanValue(value);
+}
 
 public static class QLEventParser
 {
     private static readonly JsonSerializerOptions Options = new()
     {
         PropertyNameCaseInsensitive = true,
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseUpper
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseUpper,
+        Converters = { new FlexBoolConverter() }
     };
 
     public static QlEnvelope? Parse(string rawJson)

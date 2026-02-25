@@ -17,6 +17,7 @@ public class Match :
     public DateTime? FinishedAt { get; set; }
     public int? TeamRedRounds { get; set; }
     public int? TeamBlueRounds { get; set; }
+    public bool IsArchived { get; set; }
 
     public QLServer QLServer { get; set; } = null!;
     public ICollection<MatchPlayer> MatchPlayers { get; set; } = [];

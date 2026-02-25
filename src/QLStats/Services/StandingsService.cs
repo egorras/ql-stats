@@ -13,11 +13,13 @@ public record PlayerStanding(
     // raw stats
     int Kills,
     int Deaths,
+    int Suicides,
     int Wins,
     int Losses,
     int RoundsWon,
     int RoundsLost,
     int DamageDealt,
+    int TotalMedals,
     int MatchesPlayed
 );
 
@@ -43,7 +45,7 @@ public class StandingsService(
             .Include(mp => mp.Player)
             .Include(mp => mp.Match)
             .Where(mp => mp.Match.StartedAt >= startDt && mp.Match.StartedAt < endDt
-                         && mp.Match.FinishedAt != null)
+                         && mp.Match.FinishedAt != null && !mp.Match.IsArchived)
             .ToListAsync();
 
         var grouped = matchPlayers
@@ -53,11 +55,13 @@ public class StandingsService(
         {
             var kills = g.Sum(mp => mp.Kills);
             var deaths = g.Sum(mp => mp.Deaths);
+            var suicides = g.Sum(mp => mp.Suicides);
             var wins = g.Count(mp => mp.Won);
             var losses = g.Count(mp => !mp.Won);
             var roundsWon = g.Sum(mp => mp.RoundsWon);
             var roundsLost = g.Sum(mp => mp.RoundsLost);
             var damage = g.Sum(mp => mp.DamageDealt);
+            var totalMedals = g.Sum(mp => mp.Medals.Values.Sum());
 
             var ruleBreakdown = new Dictionary<string, decimal>();
             decimal totalPoints = 0;
@@ -82,11 +86,13 @@ public class StandingsService(
                 RulesBreakdown: ruleBreakdown,
                 Kills: kills,
                 Deaths: deaths,
+                Suicides: suicides,
                 Wins: wins,
                 Losses: losses,
                 RoundsWon: roundsWon,
                 RoundsLost: roundsLost,
                 DamageDealt: damage,
+                TotalMedals: totalMedals,
                 MatchesPlayed: g.Select(mp => mp.MatchId).Distinct().Count()
             );
         })

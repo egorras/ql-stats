@@ -71,7 +71,7 @@ public class EventReplayService(
         {
             var @event = QLEventParser.Parse(rawJson)?.GetEvent();
             if (@event is { Warmup: false })
-                await ingestion.HandleAsync(@event, serverId, eventTime);
+                await ingestion.HandleAsync(@event, serverId, eventTime, isReplay: true);
 
             await db.ZmqEvents
                 .Where(e => e.Id == eventId)

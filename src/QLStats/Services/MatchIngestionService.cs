@@ -16,10 +16,10 @@ public class MatchIngestionService(
     private const int InterRoundWindowSeconds = 11;
     private readonly ConcurrentDictionary<string, int> _roundEndTimes = new();
 
-    public Task HandleAsync(QlEvent @event, int serverId, DateTime? eventTime = null) => @event switch
+    public Task HandleAsync(QlEvent @event, int serverId, DateTime? eventTime = null, bool isReplay = false) => @event switch
     {
         MatchStartedData e  => HandleMatchStartedAsync(e, serverId, eventTime),
-        MatchReportData e   => HandleMatchReportAsync(e, serverId, eventTime),
+        MatchReportData e   => HandleMatchReportAsync(e, serverId, eventTime, isReplay),
         PlayerKillData e    => HandlePlayerKillAsync(e),
         RoundOverData e     => HandleRoundOverAsync(e),
         PlayerStatsData e   => HandlePlayerStatsAsync(e),
@@ -53,7 +53,7 @@ public class MatchIngestionService(
         liveMatch.StartMatch(matchGuid, data.Map, data.GameType, data.ServerTitle, livePlayers);
     }
 
-    private async Task HandleMatchReportAsync(MatchReportData data, int serverId, DateTime? eventTime)
+    private async Task HandleMatchReportAsync(MatchReportData data, int serverId, DateTime? eventTime, bool isReplay = false)
     {
         logger.LogInformation("Match report: {MatchGuid}, RED={Red} BLUE={Blue}, Aborted={Aborted}",
             data.MatchGuid, data.Tscore0, data.Tscore1, data.Aborted);
@@ -85,8 +85,11 @@ public class MatchIngestionService(
             liveMatch.UpdateMatchInfo(data.Map, data.GameType, data.ServerTitle);
 
         liveMatch.EndMatch();
-        standingsNotifier.NotifyStandingsChanged();
-        await standingsService.SnapshotSeasonForMatchAsync(match.StartedAt);
+        if (!isReplay)
+        {
+            standingsNotifier.NotifyStandingsChanged();
+            await standingsService.SnapshotSeasonForMatchAsync(match.StartedAt);
+        }
     }
 
     private async Task HandlePlayerStatsAsync(PlayerStatsData data)
@@ -131,8 +134,13 @@ public class MatchIngestionService(
             data.Victim?.SteamId ?? "", data.Victim?.Name ?? "",
             data.Mod);
 
+        // A kill is a suicide when the killer is absent/world (empty SteamId) or the same player as
+        // the victim. The ZMQ SUICIDE flag is unreliable, so we derive it from the killer identity.
+        var isSuicide = string.IsNullOrEmpty(data.Killer?.SteamId)
+                        || data.Killer?.SteamId == data.Victim?.SteamId;
+
         // Filter inter-round suicides: a suicide within the window after ROUND_OVER is discarded
-        if (data.Suicide
+        if (isSuicide
             && _roundEndTimes.TryGetValue(matchGuid, out var roundEndTime)
             && data.Time - roundEndTime < InterRoundWindowSeconds)
         {
@@ -146,7 +154,7 @@ public class MatchIngestionService(
         var match = await db.Matches.FirstOrDefaultAsync(m => m.MatchGuid == matchGuid);
         if (match is null) return;
 
-        if (!data.Suicide && !data.TeamKill
+        if (!isSuicide && !data.TeamKill
             && data.Killer?.SteamId is { Length: > 0 } killerSteamId)
         {
             var killer = await EnsurePlayerAsync(db, killerSteamId, data.Killer!.Name);
@@ -163,7 +171,7 @@ public class MatchIngestionService(
         {
             var victim = await EnsurePlayerAsync(db, victimSteamId, data.Victim!.Name);
             var vmp = await EnsureMatchPlayerAsync(db, match.Id, victim.Id);
-            if (data.Suicide)
+            if (isSuicide)
                 vmp.Suicides++;
             else
                 vmp.Deaths++;

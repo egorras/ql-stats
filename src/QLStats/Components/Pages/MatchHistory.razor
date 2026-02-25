@@ -81,7 +81,7 @@
         var query = Db.Matches
             .Include(m => m.MatchPlayers).ThenInclude(mp => mp.Player)
             .Include(m => m.QLServer)
-            .Where(m => m.FinishedAt != null)
+            .Where(m => m.FinishedAt != null && !m.IsArchived)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(_mapFilter))

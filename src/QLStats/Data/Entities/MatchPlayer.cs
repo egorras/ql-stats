@@ -27,6 +27,8 @@ public class MatchPlayer : ICanApplyEvent<PlayerStatsData>
     {
         Team = @event.Team == 1 ? "RED" : @event.Team == 2 ? "BLUE" : "FREE";
         Won = @event.Win == 1;
+        Kills = @event.Kills;
+        Deaths = @event.Deaths;
         DamageDealt = @event.Damage?.Dealt ?? 0;
         DamageTaken = @event.Damage?.Taken ?? 0;
     }

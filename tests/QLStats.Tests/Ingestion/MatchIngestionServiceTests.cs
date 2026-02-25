@@ -81,10 +81,10 @@ public class MatchIngestionServiceTests
         }, ServerId);
 
         // PLAYER_STATS (arrive after MATCH_REPORT in normal QL flow)
-        await sut.HandleAsync(Stats("111", "RedOne",  team: 1, win: 1, dealt: 4000, taken:  800), ServerId);
-        await sut.HandleAsync(Stats("222", "RedTwo",  team: 1, win: 1, dealt: 2500, taken: 1000), ServerId);
-        await sut.HandleAsync(Stats("333", "BlueOne", team: 2, win: 0, dealt:  800, taken: 4000), ServerId);
-        await sut.HandleAsync(Stats("444", "BlueTwo", team: 2, win: 0, dealt: 1000, taken: 2500), ServerId);
+        await sut.HandleAsync(Stats("111", "RedOne",  team: 1, win: 1, kills: 3, deaths: 1, dealt: 4000, taken:  800), ServerId);
+        await sut.HandleAsync(Stats("222", "RedTwo",  team: 1, win: 1, kills: 1, deaths: 1, dealt: 2500, taken: 1000), ServerId);
+        await sut.HandleAsync(Stats("333", "BlueOne", team: 2, win: 0, kills: 1, deaths: 3, dealt:  800, taken: 4000), ServerId);
+        await sut.HandleAsync(Stats("444", "BlueTwo", team: 2, win: 0, kills: 1, deaths: 1, dealt: 1000, taken: 2500), ServerId);
 
         // ── Assertions ────────────────────────────────────────────────────────
         await using var db = new AppDbContext(options);
@@ -334,13 +334,16 @@ public class MatchIngestionServiceTests
 
     private static PlayerStatsData Stats(
         string steamId, string name,
-        int team, int win, int dealt, int taken) => new()
+        int team, int win, int dealt, int taken,
+        int kills = 0, int deaths = 0) => new()
     {
         MatchGuid = MatchGuid,
         SteamId   = steamId,
         Name      = name,
         Team      = team,
         Win       = win,
+        Kills     = kills,
+        Deaths    = deaths,
         Damage    = new() { Dealt = dealt, Taken = taken },
     };
 

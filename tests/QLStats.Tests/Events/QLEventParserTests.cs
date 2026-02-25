@@ -153,6 +153,29 @@ public class QLEventParserTests
         Assert.True(e.Suicide);
     }
 
+    // QL ZMQ stats send SUICIDE/TEAMKILL as integers 0/1 rather than JSON booleans
+    [Fact]
+    public void Parse_PlayerKill_SuicideAsInteger_Propagates()
+    {
+        var json = $$"""
+            {
+              "TYPE": "PLAYER_KILL",
+              "DATA": {
+                "MATCH_GUID": "{{TestGuid}}",
+                "TIME": 10,
+                "WARMUP": false,
+                "MOD": "LAVA",
+                "SUICIDE": 1,
+                "TEAMKILL": 0
+              }
+            }
+            """;
+
+        var e = Assert.IsType<PlayerKillData>(QLEventParser.Parse(json)?.GetEvent());
+        Assert.True(e.Suicide);
+        Assert.False(e.TeamKill);
+    }
+
     // ── ROUND_OVER ────────────────────────────────────────────────────────────
 
     [Fact]

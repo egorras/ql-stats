@@ -114,6 +114,77 @@ else
             }
         </MudTabPanel>
 
+        <MudTabPanel Text="Matches" OnClick="LoadMatches">
+            @if (_matchesLoaded && _seasonMatches.Count > 0)
+            {
+                <MudExpansionPanels Class="mt-2" Dense="true">
+                    @foreach (var match in _seasonMatches)
+                    {
+                        <MudExpansionPanel>
+                            <TitleContent>
+                                <div class="d-flex align-center gap-3 flex-wrap">
+                                    <MudText><strong>@match.Map</strong></MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@match.Date</MudText>
+                                    <MudText Typo="Typo.caption">
+                                        <MudChip T="string" Color="Color.Error" Size="Size.Small">RED @match.RedScore</MudChip>
+                                        –
+                                        <MudChip T="string" Color="Color.Info" Size="Size.Small">BLUE @match.BlueScore</MudChip>
+                                    </MudText>
+                                    <MudIconButton Href="@($"/matches/{match.MatchId}")"
+                                                   Icon="@Icons.Material.Filled.OpenInNew"
+                                                   Size="Size.Small" />
+                                </div>
+                            </TitleContent>
+                            <ChildContent>
+                                <MudTable Items="match.Players" Dense="true" Elevation="0" Class="mx-2 mb-2">
+                                    <HeaderContent>
+                                        <MudTh>Player</MudTh>
+                                        <MudTh>Team</MudTh>
+                                        <MudTh>W/L</MudTh>
+                                        <MudTh>K</MudTh>
+                                        <MudTh>D</MudTh>
+                                        <MudTh>K/D</MudTh>
+                                        <MudTh>Dmg</MudTh>
+                                        <MudTh>Dmg Taken</MudTh>
+                                        <MudTh>Pts</MudTh>
+                                    </HeaderContent>
+                                    <RowTemplate>
+                                        <MudTd><strong>@context.Name</strong></MudTd>
+                                        <MudTd>
+                                            <MudChip T="string" Color="@(context.Team == "RED" ? Color.Error : Color.Info)" Size="Size.Small">@context.Team</MudChip>
+                                        </MudTd>
+                                        <MudTd>
+                                            <MudChip T="string" Color="@(context.Won ? Color.Success : Color.Error)" Size="Size.Small">@(context.Won ? "W" : "L")</MudChip>
+                                        </MudTd>
+                                        <MudTd>@context.Kills</MudTd>
+                                        <MudTd>@context.Deaths</MudTd>
+                                        <MudTd>@(context.Deaths == 0 ? context.Kills.ToString() : ((double)context.Kills / context.Deaths).ToString("0.##"))</MudTd>
+                                        <MudTd>@context.DamageDealt.ToString("N0")</MudTd>
+                                        <MudTd>@context.DamageTaken.ToString("N0")</MudTd>
+                                        <MudTd>
+                                            <MudTooltip Text="@context.PointsBreakdown">
+                                                <span style="color:@(context.Points > 0 ? "#4CAF50" : context.Points < 0 ? "#f44336" : "inherit"); font-weight:700">
+                                                    @(context.Points > 0 ? "+" : "")@context.Points.ToString("0.##")
+                                                </span>
+                                            </MudTooltip>
+                                        </MudTd>
+                                    </RowTemplate>
+                                </MudTable>
+                            </ChildContent>
+                        </MudExpansionPanel>
+                    }
+                </MudExpansionPanels>
+            }
+            else if (_matchesLoaded)
+            {
+                <MudAlert Severity="Severity.Info" Class="mt-2">No matches recorded for this season yet.</MudAlert>
+            }
+            else
+            {
+                <MudProgressCircular Indeterminate="true" />
+            }
+        </MudTabPanel>
+
         <MudTabPanel Text="Top Duos" OnClick="LoadDuos">
             @if (_duosLoaded && _duos.Count > 0)
             {
@@ -204,6 +275,14 @@ else
     private List<PointsHistoryRow> _pointsHistory = [];
     private List<string> _pointsHistoryPlayers = [];
 
+    // Matches tab
+    private bool _matchesLoaded;
+    private record SeasonMatchPlayerRow(string Name, string Team, bool Won, int Kills, int Deaths,
+        int DamageDealt, int DamageTaken, decimal Points, string PointsBreakdown);
+    private record SeasonMatchRow(int MatchId, string Map, string Date, int? RedScore, int? BlueScore,
+        List<SeasonMatchPlayerRow> Players);
+    private List<SeasonMatchRow> _seasonMatches = [];
+
     // Duos tab
     private bool _duosLoaded;
     private List<DuoStats> _duos = [];
@@ -236,7 +315,7 @@ else
             .Include(mp => mp.Player)
             .Include(mp => mp.Match)
             .Where(mp => mp.Match.StartedAt >= startDt && mp.Match.StartedAt < endDt
-                         && mp.Match.FinishedAt != null)
+                         && mp.Match.FinishedAt != null && !mp.Match.IsArchived)
             .OrderBy(mp => mp.Match.StartedAt)
             .ToListAsync();
 
@@ -276,6 +355,53 @@ else
         _pointsHistoryLoaded = true;
     }
 
+    private async Task LoadMatches()
+    {
+        if (_matchesLoaded) return;
+
+        var startDt = DateTime.SpecifyKind(_season!.StartDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
+        var endDt = _season.EndDate.HasValue
+            ? DateTime.SpecifyKind(_season.EndDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc)
+            : DateTime.MaxValue;
+
+        var matches = await Db.Matches
+            .Include(m => m.MatchPlayers).ThenInclude(mp => mp.Player)
+            .Where(m => m.StartedAt >= startDt && m.StartedAt < endDt && m.FinishedAt != null && !m.IsArchived)
+            .OrderByDescending(m => m.StartedAt)
+            .ToListAsync();
+
+        _seasonMatches = matches.Select(m => new SeasonMatchRow(
+            MatchId: m.Id,
+            Map: m.Map,
+            Date: m.StartedAt.ToString("MM/dd HH:mm"),
+            RedScore: m.TeamRedRounds,
+            BlueScore: m.TeamBlueRounds,
+            Players: m.MatchPlayers
+                .OrderBy(mp => mp.Team)
+                .ThenByDescending(mp => mp.Kills)
+                .Select(mp =>
+                {
+                    var (pts, bd) = ScoringEngine.CalculatePointsWithBreakdown(mp, _season!);
+                    return new SeasonMatchPlayerRow(
+                        Name: mp.Player.DisplayName,
+                        Team: mp.Team,
+                        Won: mp.Won,
+                        Kills: mp.Kills,
+                        Deaths: mp.Deaths,
+                        DamageDealt: mp.DamageDealt,
+                        DamageTaken: mp.DamageTaken,
+                        Points: pts,
+                        PointsBreakdown: bd.Count > 0
+                            ? string.Join(" | ", bd.Select(kv => $"{kv.Key}: {kv.Value:0.##}"))
+                            : "No points"
+                    );
+                })
+                .ToList()
+        )).ToList();
+
+        _matchesLoaded = true;
+    }
+
     private async Task LoadDuos()
     {
         if (_duosLoaded) return;
@@ -297,7 +423,7 @@ else
             .Include(mp => mp.Player)
             .Include(mp => mp.Match)
             .Where(mp => mp.Match.StartedAt >= startDt && mp.Match.StartedAt < endDt
-                         && mp.Match.FinishedAt != null
+                         && mp.Match.FinishedAt != null && !mp.Match.IsArchived
                          && mp.Weapons != null)
             .ToListAsync();
 
