@@ -8,6 +8,8 @@ public record PlayerStanding(
     int PlayerId,
     string DisplayName,
     decimal TotalPoints,
+    decimal LastTotalPoints,
+    int LastRank,
     // breakdown
     Dictionary<string, decimal> RulesBreakdown,
     // raw stats
@@ -48,6 +50,10 @@ public class StandingsService(
                          && mp.Match.FinishedAt != null && !mp.Match.IsArchived)
             .ToListAsync();
 
+        var history = await db.SeasonStandings
+            .Where(ss => ss.SeasonId == seasonId)
+            .ToDictionaryAsync(ss => ss.PlayerId);
+
         var grouped = matchPlayers
             .GroupBy(mp => new { mp.PlayerId, mp.Player.DisplayName });
 
@@ -79,10 +85,14 @@ public class StandingsService(
                 }
             }
 
+            history.TryGetValue(g.Key.PlayerId, out var h);
+
             return new PlayerStanding(
                 PlayerId: g.Key.PlayerId,
                 DisplayName: g.Key.DisplayName,
                 TotalPoints: totalPoints,
+                LastTotalPoints: h?.LastTotalPoints ?? totalPoints,
+                LastRank: h?.LastRank ?? 0,
                 RulesBreakdown: ruleBreakdown,
                 Kills: kills,
                 Deaths: deaths,
@@ -109,8 +119,10 @@ public class StandingsService(
         await using var db = await dbFactory.CreateDbContextAsync();
         var now = DateTime.UtcNow;
 
-        foreach (var s in standings)
+        for (int i = 0; i < standings.Count; i++)
         {
+            var s = standings[i];
+            var rank = i + 1;
             var existing = await db.SeasonStandings
                 .FirstOrDefaultAsync(ss => ss.SeasonId == seasonId && ss.PlayerId == s.PlayerId);
 
@@ -121,6 +133,9 @@ public class StandingsService(
                     SeasonId = seasonId,
                     PlayerId = s.PlayerId,
                     TotalPoints = s.TotalPoints,
+                    LastTotalPoints = s.TotalPoints,
+                    CurrentRank = rank,
+                    LastRank = rank,
                     Kills = s.Kills,
                     Deaths = s.Deaths,
                     Wins = s.Wins,
@@ -134,7 +149,12 @@ public class StandingsService(
             }
             else
             {
+                existing.LastTotalPoints = existing.TotalPoints;
+                existing.LastRank = existing.CurrentRank;
+
                 existing.TotalPoints = s.TotalPoints;
+                existing.CurrentRank = rank;
+
                 existing.Kills = s.Kills;
                 existing.Deaths = s.Deaths;
                 existing.Wins = s.Wins;

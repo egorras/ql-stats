@@ -111,7 +111,6 @@ public class QLEventParserTests
                 "TIME": 42,
                 "WARMUP": false,
                 "MOD": "ROCKET",
-                "SUICIDE": false,
                 "TEAMKILL": false,
                 "KILLER": { "STEAM_ID": "111", "NAME": "Killer", "WEAPON": "ROCKET", "TEAM": 1 },
                 "VICTIM": { "STEAM_ID": "222", "NAME": "Victim", "WEAPON": "NONE",   "TEAM": 2 }
@@ -128,51 +127,6 @@ public class QLEventParserTests
         Assert.NotNull(e.Victim);
         Assert.Equal("222", e.Victim.SteamId);
         Assert.Equal("ROCKET", e.Mod);
-        Assert.False(e.Suicide);
-        Assert.False(e.TeamKill);
-    }
-
-    [Fact]
-    public void Parse_PlayerKill_SuicideFlag_Propagates()
-    {
-        var json = $$"""
-            {
-              "TYPE": "PLAYER_KILL",
-              "DATA": {
-                "MATCH_GUID": "{{TestGuid}}",
-                "TIME": 10,
-                "WARMUP": false,
-                "MOD": "LAVA",
-                "SUICIDE": true,
-                "TEAMKILL": false
-              }
-            }
-            """;
-
-        var e = Assert.IsType<PlayerKillData>(QLEventParser.Parse(json)?.GetEvent());
-        Assert.True(e.Suicide);
-    }
-
-    // QL ZMQ stats send SUICIDE/TEAMKILL as integers 0/1 rather than JSON booleans
-    [Fact]
-    public void Parse_PlayerKill_SuicideAsInteger_Propagates()
-    {
-        var json = $$"""
-            {
-              "TYPE": "PLAYER_KILL",
-              "DATA": {
-                "MATCH_GUID": "{{TestGuid}}",
-                "TIME": 10,
-                "WARMUP": false,
-                "MOD": "LAVA",
-                "SUICIDE": 1,
-                "TEAMKILL": 0
-              }
-            }
-            """;
-
-        var e = Assert.IsType<PlayerKillData>(QLEventParser.Parse(json)?.GetEvent());
-        Assert.True(e.Suicide);
         Assert.False(e.TeamKill);
     }
 
@@ -300,7 +254,6 @@ public class QLEventParserTests
                 "TIME": 5,
                 "WARMUP": true,
                 "MOD": "ROCKET",
-                "SUICIDE": false,
                 "TEAMKILL": false
               }
             }

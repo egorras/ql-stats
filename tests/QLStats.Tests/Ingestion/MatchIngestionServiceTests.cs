@@ -141,7 +141,34 @@ public class MatchIngestionServiceTests
         Assert.False(        mp["444"].Won);
     }
 
-    // ── Inter-round suicide filtering ─────────────────────────────────────────
+    // ── Suicide counting (round-based) ────────────────────────────────────────
+
+    [Fact]
+    public async Task Suicide_DuringRoundOne_IsCounted()
+    {
+        var (sut, _, options) = CreateSut();
+
+        await sut.HandleAsync(new MatchStartedData
+        {
+            MatchGuid = MatchGuid, Map = "lostworld", GameType = "CA", ServerTitle = "S",
+            Players = [new() { SteamId = "111", Name = "P1", Team = 1 }]
+        }, ServerId);
+
+        // No ROUND_OVER yet — but MATCH_STARTED seeds the sentinel, so round-1
+        // suicides must be counted.
+        await sut.HandleAsync(new PlayerKillData
+        {
+            MatchGuid = MatchGuid, Time = 30,
+            Victim = new() { SteamId = "111", Name = "P1", Weapon = "NONE", Team = 1 }
+        }, ServerId);
+
+        await using var db = new AppDbContext(options);
+        var entry = await db.MatchPlayers
+            .Include(x => x.Player)
+            .SingleAsync(x => x.Player.SteamId == "111");
+
+        Assert.Equal(1, entry.Suicides);
+    }
 
     [Fact]
     public async Task Suicide_WithinInterRoundWindow_IsNotCounted()
@@ -159,14 +186,14 @@ public class MatchIngestionServiceTests
         // Suicide 5 s after round end — inside the 11 s window → filtered
         await sut.HandleAsync(new PlayerKillData
         {
-            MatchGuid = MatchGuid, Time = 65, Suicide = true,
+            MatchGuid = MatchGuid, Time = 65,
             Victim = new() { SteamId = "111", Name = "P1", Weapon = "NONE", Team = 1 }
         }, ServerId);
 
         // Suicide 15 s after round end — outside window → counted
         await sut.HandleAsync(new PlayerKillData
         {
-            MatchGuid = MatchGuid, Time = 75, Suicide = true,
+            MatchGuid = MatchGuid, Time = 75,
             Victim = new() { SteamId = "111", Name = "P1", Weapon = "NONE", Team = 1 }
         }, ServerId);
 

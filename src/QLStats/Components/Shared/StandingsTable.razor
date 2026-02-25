@@ -1,0 +1,304 @@
+@using QLStats.Data.Entities
+@using QLStats.Services
+
+<div style="overflow-x:auto">
+    <MudTable T="PlayerStanding" Items="Standings" Dense="true" Hover="true" Elevation="0">
+        <HeaderContent>
+            <MudTh Style="width:32px">#</MudTh>
+            <MudTh>
+                <MudTableSortLabel T="PlayerStanding" SortBy="x => x.DisplayName">Player</MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel T="PlayerStanding" InitialDirection="SortDirection.Descending" SortBy="x => x.TotalPoints">Pts</MudTableSortLabel>
+            </MudTh>
+            <MudTh>Gap</MudTh>
+            @if (LiveMatch is not null)
+            {
+                <MudTh>
+                    <MudTooltip Text="Projected points in current match (excludes win/loss and damage bonuses)">Live *</MudTooltip>
+                </MudTh>
+                <MudTh>Live Gap</MudTh>
+            }
+            <MudTh>
+                <MudTableSortLabel T="PlayerStanding" SortBy="x => x.Kills">K</MudTableSortLabel>
+            </MudTh>
+            <MudTh>D</MudTh>
+            <MudTh>
+                <MudTableSortLabel T="PlayerStanding" SortBy="@(x => x.Deaths == 0 ? (double)x.Kills : (double)x.Kills / x.Deaths)">K/D</MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel T="PlayerStanding" SortBy="x => x.DamageDealt">Dmg</MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel T="PlayerStanding" SortBy="x => x.Wins">W</MudTableSortLabel>
+            </MudTh>
+            <MudTh>L</MudTh>
+            <MudTh>
+                <MudTableSortLabel T="PlayerStanding" SortBy="x => x.RoundsWon">RW</MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel T="PlayerStanding" SortBy="x => x.Suicides">Sui</MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel T="PlayerStanding" SortBy="x => x.TotalMedals">Medals</MudTableSortLabel>
+            </MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@(_rankByPlayerId.TryGetValue(context.PlayerId, out var rank) ? rank : 0)</MudTd>
+            <MudTd><strong>@context.DisplayName</strong></MudTd>
+            <MudTd>
+                <MudTooltip Text="@GetBreakdownTooltip(context)">
+                    <strong>@context.TotalPoints.ToString("0.##")</strong>
+                </MudTooltip>
+            </MudTd>
+            <MudTd>
+                @if (GetDeltaToAbove(context) is decimal gap)
+                {
+                    <div class="d-flex align-center gap-1">
+                        <span style="font-size:0.85rem;color:var(--mud-palette-text-secondary)">-@gap.ToString("0.##")</span>
+                        @if (GetTrend(context) is int trend)
+                        {
+                            <MudIcon Icon="@(trend > 0 ? Icons.Material.Filled.TrendingDown : trend < 0 ? Icons.Material.Filled.TrendingUp : Icons.Material.Filled.TrendingFlat)"
+                                     Size="Size.Small"
+                                     Color="@(trend < 0 ? Color.Success : trend > 0 ? Color.Error : Color.Default)"
+                                     Style="font-size: 1rem;" />
+                        }
+                    </div>
+                }
+            </MudTd>
+            @if (LiveMatch is not null)
+            {
+                <MudTd>
+                    <span class="live-pts-cell">
+                        @if (LiveProjections.TryGetValue(context.DisplayName, out var proj))
+                        {
+                            <strong>@proj.EstimatedPoints.ToString("0.##")</strong>
+                        }
+                        else
+                        {
+                            <span style="color:var(--mud-palette-text-disabled)">—</span>
+                        }
+                        @if (ActiveDeltas.TryGetValue(context.DisplayName, out var delta))
+                        {
+                            <span @key="@($"{context.DisplayName}|{delta.At.Ticks}")"
+                                  class="pts-delta @(delta.Delta > 0 ? "pts-delta--pos" : "pts-delta--neg")">
+                                @(delta.Delta > 0 ? "+" : "")@delta.Delta.ToString("0.##")
+                            </span>
+                        }
+                    </span>
+                </MudTd>
+                <MudTd>
+                    @if (GetLiveDeltaToAbove(context.DisplayName) is decimal liveGap)
+                    {
+                        <div class="d-flex align-center gap-1">
+                            <span style="font-size:0.85rem;color:var(--mud-palette-text-secondary)">-@liveGap.ToString("0.##")</span>
+                            @if (LiveTrends.TryGetValue(context.DisplayName, out var trend))
+                            {
+                                <MudIcon Icon="@(trend > 0 ? Icons.Material.Filled.TrendingDown : trend < 0 ? Icons.Material.Filled.TrendingUp : Icons.Material.Filled.TrendingFlat)"
+                                         Size="Size.Small"
+                                         Color="@(trend < 0 ? Color.Success : trend > 0 ? Color.Error : Color.Default)"
+                                         Style="font-size: 1rem;" />
+                            }
+                        </div>
+                    }
+                </MudTd>
+            }
+            @* K *@
+            <MudTd>
+                @{ var kPts = GetStatPts(context, ScoringRuleType.KillsMultiplier); }
+                @if (kPts != 0)
+                {
+                    <div class="stat-cell">
+                        <span class="stat-sup @(kPts > 0 ? "stat-sup--pos" : "stat-sup--neg")">@FmtPts(kPts)</span>
+                        <span>@context.Kills</span>
+                    </div>
+                }
+                else { @context.Kills }
+            </MudTd>
+            @* D *@
+            <MudTd>@context.Deaths</MudTd>
+            @* K/D *@
+            <MudTd>@(context.Deaths == 0 ? context.Kills.ToString() : ((double)context.Kills / context.Deaths).ToString("0.##"))</MudTd>
+            @* Dmg *@
+            <MudTd>
+                @{ var dPts = GetStatPts(context, ScoringRuleType.DamageMultiplier); }
+                @if (dPts != 0)
+                {
+                    <div class="stat-cell">
+                        <span class="stat-sup @(dPts > 0 ? "stat-sup--pos" : "stat-sup--neg")">@FmtPts(dPts)</span>
+                        <span>@context.DamageDealt.ToString("N0")</span>
+                    </div>
+                }
+                else { @context.DamageDealt.ToString("N0") }
+            </MudTd>
+            @* W *@
+            <MudTd>
+                @{ var wPts = GetStatPts(context, ScoringRuleType.WinMultiplier); }
+                @if (wPts != 0)
+                {
+                    <div class="stat-cell">
+                        <span class="stat-sup @(wPts > 0 ? "stat-sup--pos" : "stat-sup--neg")">@FmtPts(wPts)</span>
+                        <span>@context.Wins</span>
+                    </div>
+                }
+                else { @context.Wins }
+            </MudTd>
+            @* L *@
+            <MudTd>@context.Losses</MudTd>
+            @* RW *@
+            <MudTd>@context.RoundsWon</MudTd>
+            @* Sui *@
+            <MudTd>
+                @{ var sPts = GetStatPts(context, ScoringRuleType.SuicidesMultiplier); }
+                @if (sPts != 0)
+                {
+                    <div class="stat-cell">
+                        <span class="stat-sup @(sPts > 0 ? "stat-sup--pos" : "stat-sup--neg")">@FmtPts(sPts)</span>
+                        <span>@context.Suicides</span>
+                    </div>
+                }
+                else { @context.Suicides }
+            </MudTd>
+            @* Medals *@
+            <MudTd>
+                @{ var mPts = GetStatPts(context, ScoringRuleType.MedalMultiplier); }
+                @if (mPts != 0)
+                {
+                    <div class="stat-cell">
+                        <span class="stat-sup @(mPts > 0 ? "stat-sup--pos" : "stat-sup--neg")">@FmtPts(mPts)</span>
+                        <span>@context.TotalMedals</span>
+                    </div>
+                }
+                else { @context.TotalMedals }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</div>
+
+@if (LiveMatch is not null)
+{
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+        * Live: current match only — win/loss and damage bonuses excluded until match ends.
+    </MudText>
+}
+
+<style>
+    @@keyframes pt-flash {
+        0%   { opacity: 1; transform: translateY(0) scale(1.2); }
+        100% { opacity: 0; transform: translateY(-14px) scale(1); }
+    }
+
+    .live-pts-cell {
+        position: relative;
+        display: inline-block;
+    }
+
+    .pts-delta {
+        position: absolute;
+        right: -4px;
+        top: -16px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        animation: pt-flash 2.2s ease-out forwards;
+        pointer-events: none;
+        white-space: nowrap;
+    }
+
+    .pts-delta--pos { color: #4CAF50; }
+    .pts-delta--neg { color: #f44336; }
+
+    .stat-cell {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0;
+        line-height: 1.1;
+    }
+
+    .stat-sup {
+        font-size: 0.6rem;
+        font-weight: 700;
+        line-height: 1;
+        letter-spacing: 0.01em;
+    }
+
+    .stat-sup--pos { color: #4CAF50; }
+    .stat-sup--neg { color: #f44336; }
+</style>
+
+@code {
+    [Parameter, EditorRequired] public List<PlayerStanding> Standings { get; set; } = [];
+    [Parameter, EditorRequired] public Season Season { get; set; } = null!;
+    [Parameter] public LiveMatchDto? LiveMatch { get; set; }
+    [Parameter] public Dictionary<string, LiveProjection> LiveProjections { get; set; } = new();
+    [Parameter] public Dictionary<string, PointDelta> ActiveDeltas { get; set; } = new();
+    [Parameter] public Dictionary<string, int> LiveTrends { get; set; } = new();
+
+    private Dictionary<string, ScoringRuleType> _ruleTypeByDescription = new();
+    private Dictionary<int, int> _rankByPlayerId = new();
+
+    protected override void OnParametersSet()
+    {
+        _ruleTypeByDescription = Season.Rules
+            .GroupBy(r => r.GetRuleDescription())
+            .ToDictionary(g => g.Key, g => g.First().Type);
+
+        // Pre-compute points-based rank so it stays stable while re-sorted by other columns.
+        _rankByPlayerId = Standings
+            .OrderByDescending(s => s.TotalPoints)
+            .Select((s, i) => (s.PlayerId, Rank: i + 1))
+            .ToDictionary(x => x.PlayerId, x => x.Rank);
+    }
+
+    private decimal GetStatPts(PlayerStanding s, ScoringRuleType type)
+    {
+        decimal total = 0;
+        foreach (var (key, val) in s.RulesBreakdown)
+            if (_ruleTypeByDescription.TryGetValue(key, out var t) && t == type)
+                total += val;
+        return total;
+    }
+
+    private decimal? GetDeltaToAbove(PlayerStanding current)
+    {
+        var rank = _rankByPlayerId[current.PlayerId];
+        if (rank <= 1) return null;
+
+        var above = Standings.FirstOrDefault(s => _rankByPlayerId[s.PlayerId] == rank - 1);
+        return above is not null ? above.TotalPoints - current.TotalPoints : null;
+    }
+
+    private int? GetTrend(PlayerStanding current)
+    {
+        var rank = _rankByPlayerId[current.PlayerId];
+        if (rank <= 1 || current.LastRank <= 1) return null;
+
+        var currentGap = GetDeltaToAbove(current);
+        if (currentGap == null) return null;
+
+        var above = Standings.FirstOrDefault(s => _rankByPlayerId[s.PlayerId] == rank - 1);
+        if (above == null) return null;
+
+        var lastGap = above.LastTotalPoints - current.LastTotalPoints;
+
+        if (currentGap < lastGap) return -1; // closing
+        if (currentGap > lastGap) return 1;  // widening
+        return 0;
+    }
+
+    private decimal? GetLiveDeltaToAbove(string playerName)
+    {
+        if (!LiveProjections.TryGetValue(playerName, out var currentProj)) return null;
+
+        var sortedProjs = LiveProjections.Values.OrderByDescending(p => p.EstimatedPoints).ToList();
+        var idx = sortedProjs.FindIndex(p => p.Name == playerName);
+        if (idx <= 0) return null;
+
+        return sortedProjs[idx-1].EstimatedPoints - currentProj.EstimatedPoints;
+    }
+
+    private static string FmtPts(decimal pts) => pts > 0 ? $"+{pts:0.##}" : pts.ToString("0.##");
+
+    private string GetBreakdownTooltip(PlayerStanding s) =>
+        string.Join(" | ", s.RulesBreakdown.Select(kv => $"{kv.Key}: {kv.Value:0.##}"));
+}

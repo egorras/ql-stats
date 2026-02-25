@@ -6,6 +6,9 @@ public class SeasonStanding
     public int SeasonId { get; set; }
     public int PlayerId { get; set; }
     public decimal TotalPoints { get; set; }
+    public decimal LastTotalPoints { get; set; }
+    public int CurrentRank { get; set; }
+    public int LastRank { get; set; }
     public int Kills { get; set; }
     public int Deaths { get; set; }
     public int Wins { get; set; }

@@ -53,7 +53,6 @@ public record PlayerKillData : QlEvent
     public PlayerActor? Killer { get; init; }
     public PlayerActor? Victim { get; init; }
     public string Mod { get; init; } = "";
-    public bool Suicide { get; init; }
     [JsonPropertyName("TEAMKILL")] public bool TeamKill { get; init; }
 }
 

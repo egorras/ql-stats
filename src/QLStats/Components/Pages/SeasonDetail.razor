@@ -40,6 +40,8 @@ else
     </MudPaper>
 
     <MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true">
+
+        @* ── Standings ──────────────────────────────────────────────────────── *@
         <MudTabPanel Text="Standings">
             @if (_standings.Count == 0)
             {
@@ -47,44 +49,23 @@ else
             }
             else
             {
-                <MudTable Items="_standings" Dense="true" Hover="true">
-                    <HeaderContent>
-                        <MudTh>#</MudTh>
-                        <MudTh>Player</MudTh>
-                        <MudTh>Points</MudTh>
-                        <MudTh>W</MudTh>
-                        <MudTh>L</MudTh>
-                        <MudTh>Matches</MudTh>
-                        <MudTh>K</MudTh>
-                        <MudTh>D</MudTh>
-                        <MudTh>K/D</MudTh>
-                        <MudTh>Dmg</MudTh>
-                        <MudTh>Breakdown</MudTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        <MudTd>@(_standings.IndexOf(context) + 1)</MudTd>
-                        <MudTd><strong>@context.DisplayName</strong></MudTd>
-                        <MudTd><strong>@context.TotalPoints.ToString("0.##")</strong></MudTd>
-                        <MudTd>@context.Wins</MudTd>
-                        <MudTd>@context.Losses</MudTd>
-                        <MudTd>@context.MatchesPlayed</MudTd>
-                        <MudTd>@context.Kills</MudTd>
-                        <MudTd>@context.Deaths</MudTd>
-                        <MudTd>@(context.Deaths == 0 ? context.Kills.ToString() : ((double)context.Kills / context.Deaths).ToString("0.##"))</MudTd>
-                        <MudTd>@context.DamageDealt.ToString("N0")</MudTd>
-                        <MudTd>
-                            <MudTooltip Text="@GetBreakdownTooltip(context)">
-                                <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" />
-                            </MudTooltip>
-                        </MudTd>
-                    </RowTemplate>
-                </MudTable>
+                <StandingsTable Standings="_standings" Season="_season" />
             }
         </MudTabPanel>
 
+        @* ── Points History ──────────────────────────────────────────────────── *@
         <MudTabPanel Text="Points History" OnClick="LoadPointsHistory">
             @if (_pointsHistoryLoaded && _pointsHistory.Count > 0)
             {
+                <div class="pa-4">
+                    <MudChart ChartType="ChartType.Line" 
+                              ChartSeries="@_series" 
+                              XAxis="@_xAxisLabels" 
+                              Width="100%" 
+                              Height="350px"
+                              ChartOptions="@_chartOptions" />
+                </div>
+
                 <MudTable Items="_pointsHistory" Dense="true" Hover="true" Class="mt-2">
                     <HeaderContent>
                         <MudTh>Date</MudTh>
@@ -99,7 +80,55 @@ else
                         <MudTd>@context.Map</MudTd>
                         @foreach (var name in _pointsHistoryPlayers)
                         {
-                            <MudTd>@(context.CumulativePoints.TryGetValue(name, out var v) ? v.ToString("0.##") : "—")</MudTd>
+                            <MudTd>
+                                @{
+                                    var hasPts = context.CumulativePoints.TryGetValue(name, out var pts);
+                                    var rankIdx = _pointsHistoryPlayers.IndexOf(name);
+                                    decimal? gap = null;
+                                    int? gapTrend = null;
+
+                                    if (hasPts && rankIdx > 0)
+                                    {
+                                        var aboveName = _pointsHistoryPlayers[rankIdx - 1];
+                                        if (context.CumulativePoints.TryGetValue(aboveName, out var abovePts))
+                                        {
+                                            gap = abovePts - pts;
+                                            
+                                            // Find previous gap for trend
+                                            var rowIdx = _pointsHistory.IndexOf(context);
+                                            if (rowIdx > 0)
+                                            {
+                                                var prevRow = _pointsHistory[rowIdx - 1];
+                                                if (prevRow.CumulativePoints.TryGetValue(name, out var prevPts) &&
+                                                    prevRow.CumulativePoints.TryGetValue(aboveName, out var prevAbovePts))
+                                                {
+                                                    var prevGap = prevAbovePts - prevPts;
+                                                    if (gap < prevGap) gapTrend = -1; // Closing
+                                                    else if (gap > prevGap) gapTrend = 1; // Widening
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                <div class="d-flex flex-column">
+                                    <strong>@(hasPts ? pts.ToString("0.##") : "—")</strong>
+                                    @if (gap.HasValue)
+                                    {
+                                        <div class="d-flex align-center gap-1">
+                                            <span style="font-size:0.75rem; color:var(--mud-palette-text-secondary)">Gap: @gap.Value.ToString("0.##")</span>
+                                            @if (gapTrend == -1)
+                                            {
+                                                <MudIcon Icon="@Icons.Material.Filled.TrendingDown" Size="Size.Small" Color="Color.Success" Style="font-size:0.9rem" />
+                                            }
+                                            else if (gapTrend == 1)
+                                            {
+                                                <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="Size.Small" Color="Color.Error" Style="font-size:0.9rem" />
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </MudTd>
                         }
                     </RowTemplate>
                 </MudTable>
@@ -114,6 +143,7 @@ else
             }
         </MudTabPanel>
 
+        @* ── Matches ─────────────────────────────────────────────────────────── *@
         <MudTabPanel Text="Matches" OnClick="LoadMatches">
             @if (_matchesLoaded && _seasonMatches.Count > 0)
             {
@@ -121,21 +151,26 @@ else
                     @foreach (var match in _seasonMatches)
                     {
                         <MudExpansionPanel>
-                            <TitleContent>
-                                <div class="d-flex align-center gap-3 flex-wrap">
-                                    <MudText><strong>@match.Map</strong></MudText>
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@match.Date</MudText>
-                                    <MudText Typo="Typo.caption">
-                                        <MudChip T="string" Color="Color.Error" Size="Size.Small">RED @match.RedScore</MudChip>
-                                        –
-                                        <MudChip T="string" Color="Color.Info" Size="Size.Small">BLUE @match.BlueScore</MudChip>
-                                    </MudText>
-                                    <MudIconButton Href="@($"/matches/{match.MatchId}")"
-                                                   Icon="@Icons.Material.Filled.OpenInNew"
-                                                   Size="Size.Small" />
-                                </div>
-                            </TitleContent>
-                            <ChildContent>
+                                                                <TitleContent>
+                                                                    <div class="d-flex align-center gap-3 flex-wrap">
+                                                                        <MudText><strong>@match.Map</strong></MudText>
+                                                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@match.Date</MudText>
+                                                                        <MudText Typo="Typo.caption">
+                                                                            <MudChip T="string" Color="Color.Error" Size="Size.Small">RED @match.RedScore</MudChip>
+                                                                            –
+                                                                            <MudChip T="string" Color="Color.Info" Size="Size.Small">BLUE @match.BlueScore</MudChip>
+                                                                        </MudText>
+                                                                        <div class="d-flex align-center ml-2">
+                                                                            @foreach (var p in match.Players.OrderBy(x => x.Team == "BLUE"))
+                                                                            {
+                                                                                <MudText Typo="Typo.caption" Class="mr-2" Style="@($"color:{(p.Team == "RED" ? "var(--mud-palette-error)" : "var(--mud-palette-info)")}")">@p.Name</MudText>
+                                                                            }
+                                                                        </div>
+                                                                        <MudIconButton Href="@($"/matches/{match.MatchId}")"
+                                                                                       Icon="@Icons.Material.Filled.OpenInNew"
+                                                                                       Size="Size.Small" />
+                                                                    </div>
+                                                                </TitleContent>                            <ChildContent>
                                 <MudTable Items="match.Players" Dense="true" Elevation="0" Class="mx-2 mb-2">
                                     <HeaderContent>
                                         <MudTh>Player</MudTh>
@@ -147,26 +182,67 @@ else
                                         <MudTh>Dmg</MudTh>
                                         <MudTh>Dmg Taken</MudTh>
                                         <MudTh>Pts</MudTh>
+                                        <MudTh>Gap</MudTh>
+                                        <MudTh>Trend</MudTh>
                                     </HeaderContent>
-                                    <RowTemplate>
-                                        <MudTd><strong>@context.Name</strong></MudTd>
+                                    <RowTemplate Context="p">
+                                        <MudTd><strong>@p.Name</strong></MudTd>
                                         <MudTd>
-                                            <MudChip T="string" Color="@(context.Team == "RED" ? Color.Error : Color.Info)" Size="Size.Small">@context.Team</MudChip>
+                                            <MudChip T="string" Color="@(p.Team == "RED" ? Color.Error : Color.Info)" Size="Size.Small">@p.Team</MudChip>
                                         </MudTd>
                                         <MudTd>
-                                            <MudChip T="string" Color="@(context.Won ? Color.Success : Color.Error)" Size="Size.Small">@(context.Won ? "W" : "L")</MudChip>
+                                            <MudChip T="string" Color="@(p.Won ? Color.Success : Color.Error)" Size="Size.Small">@(p.Won ? "W" : "L")</MudChip>
                                         </MudTd>
-                                        <MudTd>@context.Kills</MudTd>
-                                        <MudTd>@context.Deaths</MudTd>
-                                        <MudTd>@(context.Deaths == 0 ? context.Kills.ToString() : ((double)context.Kills / context.Deaths).ToString("0.##"))</MudTd>
-                                        <MudTd>@context.DamageDealt.ToString("N0")</MudTd>
-                                        <MudTd>@context.DamageTaken.ToString("N0")</MudTd>
+                                        <MudTd>@p.Kills</MudTd>
+                                        <MudTd>@p.Deaths</MudTd>
+                                        <MudTd>@(p.Deaths == 0 ? p.Kills.ToString() : ((double)p.Kills / p.Deaths).ToString("0.##"))</MudTd>
+                                        <MudTd>@p.DamageDealt.ToString("N0")</MudTd>
+                                        <MudTd>@p.DamageTaken.ToString("N0")</MudTd>
                                         <MudTd>
-                                            <MudTooltip Text="@context.PointsBreakdown">
-                                                <span style="color:@(context.Points > 0 ? "#4CAF50" : context.Points < 0 ? "#f44336" : "inherit"); font-weight:700">
-                                                    @(context.Points > 0 ? "+" : "")@context.Points.ToString("0.##")
+                                            <MudTooltip Text="@p.PointsBreakdown">
+                                                <span style="color:@(p.Points > 0 ? "#4CAF50" : p.Points < 0 ? "#f44336" : "inherit"); font-weight:700">
+                                                    @(p.Points > 0 ? "+" : "")@p.Points.ToString("0.##")
                                                 </span>
                                             </MudTooltip>
+                                        </MudTd>
+                                        <MudTd>
+                                            @{
+                                                var idx = match.Players.IndexOf(p);
+                                                if (idx > 0)
+                                                {
+                                                    var above = match.Players[idx - 1];
+                                                    var gap = above.Points - p.Points;
+                                                    <span style="font-size:0.85rem;color:var(--mud-palette-text-secondary)">-@gap.ToString("0.##")</span>
+                                                }
+                                            }
+                                        </MudTd>
+                                        <MudTd>
+                                            @{
+                                                var pIdx = match.Players.IndexOf(p);
+                                                if (pIdx > 0)
+                                                {
+                                                    var currentP = p;
+                                                    var aboveP = match.Players[pIdx - 1];
+                                                    
+                                                    var currentStandingsPlayer = _standings.FirstOrDefault(s => s.DisplayName == currentP.Name);
+                                                    var aboveStandingsPlayer = _standings.FirstOrDefault(s => s.DisplayName == aboveP.Name);
+
+                                                    if (currentStandingsPlayer != null && aboveStandingsPlayer != null)
+                                                    {
+                                                        var currentOverallGap = aboveStandingsPlayer.TotalPoints - currentStandingsPlayer.TotalPoints;
+                                                        var lastOverallGap = aboveStandingsPlayer.LastTotalPoints - currentStandingsPlayer.LastTotalPoints;
+                                                        
+                                                        if (currentOverallGap < lastOverallGap)
+                                                        {
+                                                            <MudIcon Icon="@Icons.Material.Filled.TrendingDown" Size="Size.Small" Color="Color.Success" />
+                                                        }
+                                                        else if (currentOverallGap > lastOverallGap)
+                                                        {
+                                                            <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="Size.Small" Color="Color.Error" />
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         </MudTd>
                                     </RowTemplate>
                                 </MudTable>
@@ -185,6 +261,7 @@ else
             }
         </MudTabPanel>
 
+        @* ── Top Duos ────────────────────────────────────────────────────────── *@
         <MudTabPanel Text="Top Duos" OnClick="LoadDuos">
             @if (_duosLoaded && _duos.Count > 0)
             {
@@ -221,6 +298,46 @@ else
             }
         </MudTabPanel>
 
+        @* ── Medals ──────────────────────────────────────────────────────────── *@
+        <MudTabPanel Text="Medals" OnClick="LoadMedals">
+            @if (_medalsLoaded && _medalRows.Count > 0)
+            {
+                <div style="overflow-x:auto" class="mt-2">
+                    <MudTable T="MedalRow" Items="_medalRows" Dense="true" Hover="true">
+                        <HeaderContent>
+                            <MudTh>
+                                <MudTableSortLabel T="MedalRow" SortBy="x => x.DisplayName">Player</MudTableSortLabel>
+                            </MudTh>
+                            @foreach (var medal in _medalNames)
+                            {
+                                <MudTh>@medal</MudTh>
+                            }
+                            <MudTh>
+                                <MudTableSortLabel T="MedalRow" InitialDirection="SortDirection.Descending" SortBy="x => x.Total">Total</MudTableSortLabel>
+                            </MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd><strong>@context.DisplayName</strong></MudTd>
+                            @foreach (var medal in _medalNames)
+                            {
+                                <MudTd>@(context.Medals.TryGetValue(medal, out var v) && v > 0 ? v.ToString() : "—")</MudTd>
+                            }
+                            <MudTd><strong>@context.Total</strong></MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </div>
+            }
+            else if (_medalsLoaded)
+            {
+                <MudAlert Severity="Severity.Info" Class="mt-2">No medal data recorded for this season yet.</MudAlert>
+            }
+            else
+            {
+                <MudProgressCircular Indeterminate="true" />
+            }
+        </MudTabPanel>
+
+        @* ── Weapon Performance ──────────────────────────────────────────────── *@
         <MudTabPanel Text="Weapon Performance" OnClick="LoadWeaponStats">
             @if (_weaponStatsLoaded && _weaponRows.Count > 0)
             {
@@ -260,6 +377,7 @@ else
                 <MudProgressCircular Indeterminate="true" />
             }
         </MudTabPanel>
+
     </MudTabs>
 }
 
@@ -274,6 +392,9 @@ else
     private record PointsHistoryRow(string Date, string Map, Dictionary<string, decimal> CumulativePoints);
     private List<PointsHistoryRow> _pointsHistory = [];
     private List<string> _pointsHistoryPlayers = [];
+    private List<ChartSeries<double>> _series = new();
+    private string[] _xAxisLabels = Array.Empty<string>();
+    private ChartOptions _chartOptions = new();
 
     // Matches tab
     private bool _matchesLoaded;
@@ -286,6 +407,12 @@ else
     // Duos tab
     private bool _duosLoaded;
     private List<DuoStats> _duos = [];
+
+    // Medals tab
+    private bool _medalsLoaded;
+    private record MedalRow(string DisplayName, Dictionary<string, int> Medals, int Total);
+    private List<MedalRow> _medalRows = [];
+    private List<string> _medalNames = [];
 
     // Weapon performance tab
     private bool _weaponStatsLoaded;
@@ -302,14 +429,20 @@ else
         }
     }
 
-    private async Task LoadPointsHistory()
+    private (DateTime startDt, DateTime endDt) SeasonDateRange()
     {
-        if (_pointsHistoryLoaded) return;
-
         var startDt = DateTime.SpecifyKind(_season!.StartDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
         var endDt = _season.EndDate.HasValue
             ? DateTime.SpecifyKind(_season.EndDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc)
             : DateTime.MaxValue;
+        return (startDt, endDt);
+    }
+
+    private async Task LoadPointsHistory()
+    {
+        if (_pointsHistoryLoaded) return;
+
+        var (startDt, endDt) = SeasonDateRange();
 
         var matchPlayers = await Db.MatchPlayers
             .Include(mp => mp.Player)
@@ -328,7 +461,6 @@ else
         var top5 = _standings.Take(5).ToList();
         _pointsHistoryPlayers = top5.Select(s => s.DisplayName).ToList();
 
-        // Cumulative points per player, emitted per match (by match start date + map)
         var cumulative = top5.ToDictionary(s => s.DisplayName, _ => (decimal)0);
 
         var byMatch = matchPlayers
@@ -341,7 +473,7 @@ else
             {
                 var name = top5.FirstOrDefault(s => s.PlayerId == mp.PlayerId)?.DisplayName;
                 if (name is null) continue;
-                var (pts, _) = ScoringEngine.CalculatePointsWithBreakdown(mp, _season);
+                var (pts, _) = ScoringEngine.CalculatePointsWithBreakdown(mp, _season!);
                 cumulative[name] += pts;
             }
 
@@ -352,6 +484,14 @@ else
             ));
         }
 
+        // Prepare chart data
+        _xAxisLabels = _pointsHistory.Select(x => x.Date).ToArray();
+        _series = _pointsHistoryPlayers.Select(name => new ChartSeries<double>
+        {
+            Name = name,
+            Data = _pointsHistory.Select(h => (double)h.CumulativePoints[name]).ToArray()
+        }).ToList();
+
         _pointsHistoryLoaded = true;
     }
 
@@ -359,10 +499,7 @@ else
     {
         if (_matchesLoaded) return;
 
-        var startDt = DateTime.SpecifyKind(_season!.StartDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
-        var endDt = _season.EndDate.HasValue
-            ? DateTime.SpecifyKind(_season.EndDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc)
-            : DateTime.MaxValue;
+        var (startDt, endDt) = SeasonDateRange();
 
         var matches = await Db.Matches
             .Include(m => m.MatchPlayers).ThenInclude(mp => mp.Player)
@@ -377,8 +514,6 @@ else
             RedScore: m.TeamRedRounds,
             BlueScore: m.TeamBlueRounds,
             Players: m.MatchPlayers
-                .OrderBy(mp => mp.Team)
-                .ThenByDescending(mp => mp.Kills)
                 .Select(mp =>
                 {
                     var (pts, bd) = ScoringEngine.CalculatePointsWithBreakdown(mp, _season!);
@@ -396,6 +531,7 @@ else
                             : "No points"
                     );
                 })
+                .OrderByDescending(p => p.Points)
                 .ToList()
         )).ToList();
 
@@ -410,14 +546,49 @@ else
         _duosLoaded = true;
     }
 
+    private async Task LoadMedals()
+    {
+        if (_medalsLoaded) return;
+
+        var (startDt, endDt) = SeasonDateRange();
+
+        var matchPlayers = await Db.MatchPlayers
+            .Include(mp => mp.Player)
+            .Include(mp => mp.Match)
+            .Where(mp => mp.Match.StartedAt >= startDt && mp.Match.StartedAt < endDt
+                         && mp.Match.FinishedAt != null && !mp.Match.IsArchived)
+            .ToListAsync();
+
+        // All distinct medal types in this season, sorted alphabetically
+        _medalNames = matchPlayers
+            .SelectMany(mp => mp.Medals.Keys)
+            .Distinct()
+            .OrderBy(m => m)
+            .ToList();
+
+        // Aggregate medal counts per player
+        _medalRows = matchPlayers
+            .GroupBy(mp => new { mp.PlayerId, mp.Player.DisplayName })
+            .Select(g =>
+            {
+                var medals = g
+                    .SelectMany(mp => mp.Medals)
+                    .GroupBy(kv => kv.Key)
+                    .ToDictionary(mg => mg.Key, mg => mg.Sum(kv => kv.Value));
+                return new MedalRow(g.Key.DisplayName, medals, medals.Values.Sum());
+            })
+            .Where(r => r.Total > 0)
+            .OrderByDescending(r => r.Total)
+            .ToList();
+
+        _medalsLoaded = true;
+    }
+
     private async Task LoadWeaponStats()
     {
         if (_weaponStatsLoaded) return;
 
-        var startDt = DateTime.SpecifyKind(_season!.StartDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
-        var endDt = _season.EndDate.HasValue
-            ? DateTime.SpecifyKind(_season.EndDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc)
-            : DateTime.MaxValue;
+        var (startDt, endDt) = SeasonDateRange();
 
         var matchPlayers = await Db.MatchPlayers
             .Include(mp => mp.Player)
@@ -453,10 +624,5 @@ else
             .ToList();
 
         _weaponStatsLoaded = true;
-    }
-
-    private string GetBreakdownTooltip(PlayerStanding s)
-    {
-        return string.Join(" | ", s.RulesBreakdown.Select(kvp => $"{kvp.Key}: {kvp.Value:0.##}"));
     }
 }

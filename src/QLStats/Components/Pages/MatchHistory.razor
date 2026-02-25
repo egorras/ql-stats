@@ -46,7 +46,7 @@
         <MudTd>@context.ServerTitle</MudTd>
         <MudTd>RED @context.TeamRedRounds – @context.TeamBlueRounds BLUE</MudTd>
         <MudTd>
-            @foreach (var mp in context.MatchPlayers.OrderBy(p => p.Team))
+            @foreach (var mp in context.MatchPlayers.OrderBy(p => p.Team == "BLUE"))
             {
                 <MudChip T="string" Color="@(mp.Team == "RED" ? Color.Error : Color.Info)" Size="Size.Small" Class="mr-1">
                     @mp.Player.DisplayName

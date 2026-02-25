@@ -44,8 +44,9 @@ public class MatchIngestionService(
             await db.SaveChangesAsync();
         }
 
-        // Reset round-end tracking for this new match
-        _roundEndTimes.TryRemove(matchGuid, out _);
+        // Seed with a sentinel far enough in the past so that round-1 suicides
+        // (before any ROUND_OVER) are counted immediately.
+        _roundEndTimes[matchGuid] = -InterRoundWindowSeconds;
 
         var livePlayers = data.Players?
             .Where(p => !p.Bot)
@@ -139,10 +140,12 @@ public class MatchIngestionService(
         var isSuicide = string.IsNullOrEmpty(data.Killer?.SteamId)
                         || data.Killer?.SteamId == data.Victim?.SteamId;
 
-        // Filter inter-round suicides: a suicide within the window after ROUND_OVER is discarded
+        // Suicides are only counted once a round has ended and at least InterRoundWindowSeconds
+        // have elapsed since ROUND_OVER. This discards both respawn-phase deaths (within the
+        // window) and pre-game deaths (no round end recorded yet).
         if (isSuicide
-            && _roundEndTimes.TryGetValue(matchGuid, out var roundEndTime)
-            && data.Time - roundEndTime < InterRoundWindowSeconds)
+            && (!_roundEndTimes.TryGetValue(matchGuid, out var roundEndTime)
+                || data.Time - roundEndTime < InterRoundWindowSeconds))
         {
             return;
         }
