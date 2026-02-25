@@ -17,6 +17,12 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 EXPOSE 80
 EXPOSE 443
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    libgssapi-krb5-2 \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV ASPNETCORE_URLS=http://+:80
 COPY --from=build /app/publish .
 ENTRYPOINT ["dotnet", "QLStats.dll"]
